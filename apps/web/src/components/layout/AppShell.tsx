@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../store/auth";
 import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
@@ -83,9 +83,13 @@ export function AppShell() {
 export function RequireAuth() {
   const { ready, user } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
   useEffect(() => {
     if (ready && !user) nav("/login", { replace: true });
-  }, [ready, user, nav]);
+    if (ready && user && !user.emailVerified && location.pathname !== "/verify-email/pending") {
+      nav("/verify-email/pending", { replace: true });
+    }
+  }, [ready, user, nav, location.pathname]);
   if (!ready) {
     return (
       <div className="flex h-dvh items-center justify-center bg-ink text-mute">

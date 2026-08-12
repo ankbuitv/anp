@@ -4,6 +4,8 @@ import { Viewer } from "./components/media/Viewer";
 import { Toasts } from "./components/common/Toasts";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
+import { VerifyEmail } from "./pages/VerifyEmail";
+import { VerifyEmailPending } from "./pages/VerifyEmailPending";
 import { Home } from "./pages/Home";
 import { Library, Videos, Favorites, Recent } from "./pages/Library";
 import { Albums, AlbumDetail } from "./pages/Albums";
@@ -30,6 +32,8 @@ export function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/verify-email/pending" element={<VerifyEmailPending />} />
         <Route
           path="/s/:token"
           element={

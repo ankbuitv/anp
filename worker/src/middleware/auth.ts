@@ -27,7 +27,7 @@ export const loadSession = createMiddleware<AppContext>(async (c, next) => {
     const row = await c.env.DB.prepare(
       `SELECT s.id as sid, s.device_id as device_id, s.expires_at as expires_at,
               u.id as id, u.name as name, u.email as email, u.avatar_key as avatar_key,
-              u.vault_pin_hash as vault_pin_hash, u.created_at as created_at
+              u.vault_pin_hash as vault_pin_hash, u.email_verified as email_verified, u.created_at as created_at
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ?`,
     )
@@ -41,6 +41,7 @@ export const loadSession = createMiddleware<AppContext>(async (c, next) => {
         email: string;
         avatar_key: string | null;
         vault_pin_hash: string | null;
+        email_verified: number;
         created_at: number;
       }>();
 
@@ -51,6 +52,7 @@ export const loadSession = createMiddleware<AppContext>(async (c, next) => {
         email: row.email,
         avatarKey: row.avatar_key,
         hasVaultPin: !!row.vault_pin_hash,
+        emailVerified: row.email_verified === 1,
         createdAt: row.created_at,
       };
       c.set("user", user);

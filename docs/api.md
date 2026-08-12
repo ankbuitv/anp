@@ -18,6 +18,8 @@ Mutation kiểm tra `Origin`.
 | POST | `/auth/register` | name, email, password, confirmPassword |
 | POST | `/auth/login` | email, password, device* |
 | POST | `/auth/logout` | |
+| POST | `/auth/verify-email` | token từ email |
+| POST | `/auth/verify-email/resend` | gửi lại email xác minh |
 | GET | `/auth/me` | user + settings + vaultUnlocked |
 | PATCH | `/auth/me` | name |
 | POST | `/auth/password` | đổi mật khẩu |

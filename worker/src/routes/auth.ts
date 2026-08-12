@@ -8,7 +8,13 @@ import {
   pinSchema,
   settingsSchema,
 } from "@anp/validation";
-import { LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_MS, SESSION_DAYS, VAULT_SESSION_MINUTES } from "@anp/shared";
+import {
+  LOGIN_MAX_ATTEMPTS,
+  LOGIN_WINDOW_MS,
+  SESSION_DAYS,
+  EMAIL_VERIFY_HOURS,
+  VAULT_SESSION_MINUTES,
+} from "@anp/shared";
 import type { Context } from "hono";
 import type { AppContext } from "../env";
 import { Errors } from "../lib/errors";
@@ -17,6 +23,8 @@ import { cookieOpts, clientIp } from "../lib/http";
 import { hashSecret, verifySecret, sha256Hex, randomHex, newId } from "../lib/crypto";
 import { audit } from "../lib/audit";
 import { notify } from "../lib/notify";
+import { sendEmail, verificationEmail } from "../lib/email";
+import { appBase } from "../lib/http";
 import { SESSION_COOKIE, VAULT_COOKIE } from "../middleware/auth";
 import { requireAuth } from "../middleware/auth";
 import { rateLimit } from "../middleware/rateLimit";
@@ -31,6 +39,8 @@ function userPayload(u: {
   avatar_key?: string | null;
   hasVaultPin?: boolean;
   vault_pin_hash?: string | null;
+  emailVerified?: boolean;
+  email_verified?: number | boolean;
   createdAt?: number;
   created_at?: number;
 }) {
@@ -40,6 +50,8 @@ function userPayload(u: {
     email: u.email,
     avatarUrl: u.avatarKey || u.avatar_key ? `/api/v1/me/avatar` : null,
     hasVaultPin: u.hasVaultPin ?? !!u.vault_pin_hash,
+    emailVerified:
+      u.emailVerified ?? (typeof u.email_verified === "boolean" ? u.email_verified : u.email_verified === 1),
     createdAt: u.createdAt ?? u.created_at ?? 0,
   };
 }
@@ -74,6 +86,25 @@ async function createSession(
   return { sid, deviceId, token };
 }
 
+async function createEmailVerification(c: Context<AppContext>, userId: string, email: string) {
+  const token = randomHex(32);
+  const tokenHash = await sha256Hex(token);
+  const now = Date.now();
+  const expires = now + EMAIL_VERIFY_HOURS * 3600_000;
+  await c.env.DB.prepare(
+    `INSERT INTO email_verifications (id, user_id, email, token_hash, expires_at, consumed_at, created_at)
+     VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+  )
+    .bind(newId(), userId, email, tokenHash, expires, now)
+    .run();
+  const url = `${appBase(c)}/verify-email?token=${encodeURIComponent(token)}`;
+  const user = await c.env.DB.prepare(`SELECT name FROM users WHERE id = ?`).bind(userId).first<{ name: string }>();
+  const message = verificationEmail(user?.name || "", url);
+  message.to = email;
+  await sendEmail(c.env, message);
+  return { url, token };
+}
+
 authRoutes.post("/register", rateLimit(8, 10 * 60_000, "reg"), async (c) => {
   const body = registerSchema.parse(await c.req.json());
   const exists = await c.env.DB.prepare(`SELECT id FROM users WHERE email = ?`).bind(body.email.toLowerCase()).first();
@@ -91,12 +122,35 @@ authRoutes.post("/register", rateLimit(8, 10 * 60_000, "reg"), async (c) => {
     .bind(id)
     .run();
   await createSession(c, id, { name: "Trình duyệt", type: "web", platform: c.req.header("user-agent") || "" });
+  let emailQueued = true;
+  try {
+    await createEmailVerification(c, id, body.email.toLowerCase());
+  } catch (err) {
+    emailQueued = false;
+    console.error("verification email failed", err);
+  }
   await audit(c, "register", { userId: id, entityType: "user", entityId: id });
-  await notify(c.env.DB, id, "welcome", "Chào mừng đến ANP", "Tải ảnh hoặc video đầu tiên để bắt đầu thư viện của bạn.");
+  await notify(
+    c.env.DB,
+    id,
+    "welcome",
+    "Chào mừng đến ANP",
+    emailQueued
+      ? "Kiểm tra email để xác nhận tài khoản, sau đó tải ảnh hoặc video đầu tiên."
+      : "Tài khoản đã tạo. Hệ thống chưa gửi được email xác nhận, bạn có thể thử gửi lại.",
+  );
   return ok(
     c,
     {
-      user: userPayload({ id, name: body.name, email: body.email.toLowerCase(), created_at: now, hasVaultPin: false }),
+      user: userPayload({
+        id,
+        name: body.name,
+        email: body.email.toLowerCase(),
+        created_at: now,
+        hasVaultPin: false,
+        emailVerified: false,
+      }),
+      emailQueued,
     },
     201,
   );
@@ -124,6 +178,7 @@ authRoutes.post("/login", rateLimit(20, 10 * 60_000, "login"), async (c) => {
     password_salt: string;
     avatar_key: string | null;
     vault_pin_hash: string | null;
+    email_verified: number;
     created_at: number;
   }>();
 
@@ -150,6 +205,49 @@ authRoutes.post("/logout", requireAuth, async (c) => {
   deleteCookie(c, VAULT_COOKIE, { path: "/" });
   await audit(c, "logout");
   return ok(c, { success: true });
+});
+
+authRoutes.post("/verify-email", rateLimit(10, 10 * 60_000, "verify"), async (c) => {
+  const { token } = (await c.req.json()) as { token?: string };
+  if (!token || typeof token !== "string" || token.length < 32) throw Errors.badRequest("Liên kết xác minh không hợp lệ.");
+  const tokenHash = await sha256Hex(token);
+  const row = await c.env.DB.prepare(
+    `SELECT id, user_id, email, expires_at, consumed_at FROM email_verifications WHERE token_hash = ?`,
+  )
+    .bind(tokenHash)
+    .first<{ id: string; user_id: string; email: string; expires_at: number; consumed_at: number | null }>();
+  if (!row || row.consumed_at || row.expires_at <= Date.now()) {
+    throw Errors.badRequest("Liên kết xác minh không hợp lệ hoặc đã hết hạn.");
+  }
+  const now = Date.now();
+  const res = await c.env.DB
+    .prepare(
+      `UPDATE email_verifications SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL AND expires_at > ?`,
+    )
+    .bind(now, row.id, now)
+    .run();
+  if (res.meta.changes === 0) throw Errors.badRequest("Liên kết xác minh đã được sử dụng.");
+  await c.env.DB.prepare(`UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ? AND email = ?`)
+    .bind(now, row.user_id, row.email)
+    .run();
+  const user = await c.env.DB.prepare(`SELECT * FROM users WHERE id = ?`).bind(row.user_id).first();
+  if (c.get("user")?.id !== row.user_id) {
+    await createSession(c, row.user_id, { name: "Trình duyệt", type: "web", platform: c.req.header("user-agent") || "" });
+  }
+  await audit(c, "email_verify", { userId: row.user_id, entityType: "user", entityId: row.user_id });
+  return ok(c, { verified: true, user: user ? userPayload(user as Parameters<typeof userPayload>[0]) : null });
+});
+
+authRoutes.post("/verify-email/resend", requireAuth, rateLimit(5, 10 * 60_000, "resend"), async (c) => {
+  const u = c.get("user")!;
+  if (u.emailVerified) return ok(c, { queued: true });
+  try {
+    await createEmailVerification(c, u.id, u.email);
+    return ok(c, { queued: true });
+  } catch (err) {
+    console.error("resend verification failed", err);
+    throw Errors.server("Không gửi được email xác nhận. Thử lại sau.");
+  }
 });
 
 authRoutes.get("/me", requireAuth, async (c) => {

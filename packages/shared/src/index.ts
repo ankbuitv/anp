@@ -6,6 +6,7 @@ export const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB — dưới giới hạn body
 export const THUMB_MAX_EDGE = 360;
 export const PREVIEW_MAX_EDGE = 1600;
 export const SESSION_DAYS = 30;
+export const EMAIL_VERIFY_HOURS = 24;
 export const VAULT_SESSION_MINUTES = 30;
 export const SHARE_TOKEN_BYTES = 18;
 export const DROP_TTL_MINUTES = 30;
