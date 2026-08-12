@@ -45,7 +45,8 @@ npm run build
 2. D1 `f1ae2e6b-4450-47c5-953d-3a6fe5924442`
 3. Workers KV `6fe12765c4714494ae4a0827393a0c78`
 4. Custom domain `p.ankb.qzz.io` trỏ Worker
-5. GitHub secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+5. Secret gửi email xác minh: `MAIL_FROM` và `BREVO_API_KEY` (hoặc `RESEND_API_KEY`, hoặc `MAILGUN_API_KEY` + `MAILGUN_DOMAIN`)
+6. GitHub secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
 
 Storage dùng Workers KV thay R2, vì vậy không cần tạo R2 bucket, S3 credentials hay thẻ thanh toán R2. Xem quota và lưu ý eventual consistency tại [docs/cloudflare.md](docs/cloudflare.md).
 

@@ -23,7 +23,7 @@ export function Login() {
       });
       useAuth.setState({ user: res.user });
       await useAuth.getState().load();
-      nav("/");
+      nav(res.user.emailVerified ? "/" : "/verify-email/pending");
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Không thể đăng nhập.");
     } finally {

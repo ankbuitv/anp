@@ -5,6 +5,12 @@ export type Env = {
   APP_URL?: string;
   ENVIRONMENT?: string;
   TURNSTILE_SECRET?: string;
+  MAIL_FROM?: string;
+  RESEND_API_KEY?: string;
+  MAILGUN_API_KEY?: string;
+  MAILGUN_DOMAIN?: string;
+  BREVO_API_KEY?: string;
+  EMAIL_PROVIDER?: "resend" | "mailgun" | "brevo" | "log";
 };
 
 export type AuthedUser = {
@@ -13,6 +19,7 @@ export type AuthedUser = {
   email: string;
   avatarKey: string | null;
   hasVaultPin: boolean;
+  emailVerified: boolean;
   createdAt: number;
 };
 

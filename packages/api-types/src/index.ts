@@ -14,6 +14,7 @@ export type UserPublic = {
   email: string;
   avatarUrl: string | null;
   hasVaultPin: boolean;
+  emailVerified: boolean;
   createdAt: number;
 };
 
