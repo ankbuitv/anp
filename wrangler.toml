@@ -18,7 +18,7 @@ run_worker_first = ["/api/*"]
 binding = "DB"
 database_name = "anp"
 # Thay bằng ID thật sau: wrangler d1 create anp
-database_id = "00000000-0000-0000-0000-000000000001"
+database_id = "f1ae2e6b-4450-47c5-953d-3a6fe5924442"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
