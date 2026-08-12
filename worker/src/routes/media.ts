@@ -6,7 +6,7 @@ import { Errors } from "../lib/errors";
 import { ok, makeCursor, parseCursor } from "../lib/http";
 import { requireAuth } from "../middleware/auth";
 import { albumsForMedia, getMedia, publicMedia, visibilitySql, type MediaRow } from "../lib/media";
-import { serveObject } from "../lib/r2";
+import { serveObject } from "../lib/kv";
 import { audit } from "../lib/audit";
 
 export const mediaRoutes = new Hono<AppContext>();
@@ -344,10 +344,10 @@ async function fileHandler(c: Context<AppContext>, kind: "file" | "thumb" | "pre
 
   const download = c.req.query("dl") === "1";
   if (kind === "file") {
-    return serveObject(c.env.BUCKET, row.r2_key, c.req.raw, row.mime, download ? row.original_name : undefined);
+    return serveObject(c.env.MEDIA, row.storage_key, c.req.raw, row.mime, download ? row.original_name : undefined);
   }
-  const key = kind === "preview" ? row.preview_key || row.thumb_key || row.r2_key : row.thumb_key || row.preview_key || row.r2_key;
-  return serveObject(c.env.BUCKET, key, c.req.raw, "image/jpeg");
+  const key = kind === "preview" ? row.preview_key || row.thumb_key || row.storage_key : row.thumb_key || row.preview_key || row.storage_key;
+  return serveObject(c.env.MEDIA, key, c.req.raw, "image/jpeg");
 }
 
 mediaRoutes.get("/:id/file", async (c) => fileHandler(c, "file"));

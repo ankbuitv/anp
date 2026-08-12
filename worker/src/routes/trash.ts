@@ -5,7 +5,7 @@ import type { AppContext } from "../env";
 import { ok } from "../lib/http";
 import { requireAuth } from "../middleware/auth";
 import { audit } from "../lib/audit";
-import { deleteKeys } from "../lib/r2";
+import { deleteKeys } from "../lib/kv";
 import { type MediaRow } from "../lib/media";
 
 export const trashRoutes = new Hono<AppContext>();
@@ -39,7 +39,7 @@ trashRoutes.post("/purge", async (c) => {
     rows = res.results ?? [];
   }
   for (const r of rows) {
-    await deleteKeys(c.env.BUCKET, [r.r2_key, r.thumb_key, r.preview_key]);
+    await deleteKeys(c.env.MEDIA, [r.storage_key, r.thumb_key, r.preview_key]);
     await c.env.DB.prepare(`DELETE FROM media WHERE id = ?`).bind(r.id).run();
   }
   await audit(c, "purge", { entityType: "media", meta: { count: rows.length } });

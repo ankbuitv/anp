@@ -17,26 +17,18 @@ run_worker_first = ["/api/*"]
 [[d1_databases]]
 binding = "DB"
 database_name = "anp"
-# Thay bằng ID thật sau: wrangler d1 create anp
 database_id = "f1ae2e6b-4450-47c5-953d-3a6fe5924442"
 migrations_dir = "migrations"
 
-[[r2_buckets]]
-binding = "BUCKET"
-bucket_name = "anp-media"
-# preview / local dùng R2 giả lập của Wrangler
-preview_bucket_name = "anp-media-preview"
+[[kv_namespaces]]
+binding = "MEDIA"
+id = "6fe12765c4714494ae4a0827393a0c78"
 
 [vars]
 APP_URL = "https://p.ankb.qzz.io"
 ENVIRONMENT = "production"
 
 # Secrets (wrangler secret put) — KHÔNG ghi vào file này:
-# R2_ACCOUNT_ID
-# R2_ACCESS_KEY_ID
-# R2_SECRET_ACCESS_KEY
-# R2_BUCKET_NAME
 # TURNSTILE_SECRET
 
-# Custom domain p.ankb.qzz.io được gắn trên Cloudflare dashboard
-# hoặc: wrangler domains ...
+# Custom domain p.ankb.qzz.io được gắn trên Cloudflare dashboard.
