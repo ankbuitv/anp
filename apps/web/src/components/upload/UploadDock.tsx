@@ -36,19 +36,27 @@ export function UploadDock() {
       {open ? (
         <div className="max-h-56 overflow-y-auto border-t border-line/10">
           {items.slice(-12).map((it) => (
-            <div key={it.localId} className="flex items-center gap-2 px-3 py-1.5 text-xs">
-              <div className="min-w-0 flex-1 truncate">{it.name}</div>
-              <div className={cn("w-20 text-right text-mute", it.status === "error" && "text-danger")}>
-                {it.status === "done" || it.status === "duplicate" ? "xong" : it.status === "error" ? "lỗi" : `${Math.round(it.progress * 100)}%`}
+            <div key={it.localId} className="px-3 py-1.5 text-xs">
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1 truncate">{it.name}</div>
+                <div className={cn("w-20 text-right text-mute", it.status === "error" && "text-danger")}>
+                  {it.status === "done" || it.status === "duplicate" ? "xong" : it.status === "error" ? "lỗi" : `${Math.round(it.progress * 100)}%`}
+                </div>
+                {it.status === "error" ? (
+                  <button onClick={() => uploads.retry(it.localId)} className="text-bronze">
+                    Thử lại
+                  </button>
+                ) : it.status !== "done" && it.status !== "duplicate" ? (
+                  <button onClick={() => uploads.cancel(it.localId)} className="text-mute">
+                    <Icon.Close size={12} />
+                  </button>
+                ) : null}
               </div>
-              {it.status === "error" ? (
-                <button onClick={() => uploads.retry(it.localId)} className="text-bronze">
-                  Thử lại
-                </button>
-              ) : it.status !== "done" && it.status !== "duplicate" ? (
-                <button onClick={() => uploads.cancel(it.localId)} className="text-mute">
-                  <Icon.Close size={12} />
-                </button>
+              {/* Hiện nguyên nhân thật để phân biệt lỗi cấu hình B2, hết hạn phiên hay file quá lớn. */}
+              {it.status === "error" && it.error ? (
+                <p className="mt-1 text-[11px] leading-snug text-danger" title={it.error}>
+                  {it.error}
+                </p>
               ) : null}
             </div>
           ))}

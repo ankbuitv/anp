@@ -1,10 +1,36 @@
 import { useQuery } from "@tanstack/react-query";
-import type { StorageBreakdown } from "@anp/api-types";
+import type { StorageBackendInfo, StorageBreakdown } from "@anp/api-types";
 import { formatBytes } from "@anp/shared";
 import { api } from "../lib/api";
 import { PageHead } from "./Library";
 import { Stat } from "../components/common/Ui";
 import { useUi } from "../store/ui";
+
+function BackendCard({ b }: { b: StorageBackendInfo }) {
+  const label =
+    b.provider === "b2" ? `Backblaze B2 · ${b.bucket ?? "—"}` : b.provider === "kv" ? "Workers KV (dự phòng)" : "Chưa cấu hình";
+  return (
+    <div className="rounded-2xl bg-elev p-4 hairline">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`h-2 w-2 rounded-full ${b.healthy ? "bg-ok" : "bg-danger"}`} />
+        <span className="text-sm font-medium">Nơi lưu trữ: {label}</span>
+        {b.bytes != null ? (
+          <span className="text-xs text-mute">
+            · {formatBytes(b.bytes)} thực tế trên bucket
+            {b.objects != null ? ` · ${b.objects} object` : ""}
+            {b.truncated ? " (đã cắt bớt)" : ""}
+          </span>
+        ) : null}
+      </div>
+      {b.message ? <p className="mt-2 text-xs text-danger">{b.message}</p> : null}
+      {b.provider === "kv" ? (
+        <p className="mt-2 text-xs text-mute">
+          Đang dùng Workers KV nên file lớn có thể tải lên lỗi. Đặt B2_KEY_ID và B2_APP_KEY để chuyển sang Backblaze B2.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function Storage() {
   const q = useQuery({ queryKey: ["storage"], queryFn: () => api<StorageBreakdown>("/storage") });
@@ -26,6 +52,7 @@ export function Storage() {
           <Stat label="Video" value={d ? formatBytes(d.videos.bytes) : "—"} hint={`${d?.videos.count ?? 0}`} />
           <Stat label="Thumbnail" value={d ? formatBytes(d.thumbs.bytes) : "—"} />
         </div>
+        {d?.backend ? <BackendCard b={d.backend} /> : null}
         <div className="h-4 overflow-hidden rounded-full bg-elev">
           <div className="flex h-full">
             {bars.map((b) => (

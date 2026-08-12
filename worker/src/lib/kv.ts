@@ -319,17 +319,22 @@ function kvNamespace(env: Env): KVNamespace {
 }
 
 export async function putObject(env: Env, key: string, body: StorageBody, contentType: string) {
-  // Ưu tiên ghi vào KV; nếu KV không đủ/chịu được (lỗi) thì mới sang B2.
-  if (env.MEDIA) {
+  // B2 là nơi lưu chính: dung lượng lớn, không dính giới hạn 25 MB/value của KV.
+  // KV chỉ còn là fallback cho local dev khi chưa cấu hình B2.
+  if (isB2Configured(env)) {
     try {
-      return await putKvObject(env.MEDIA, key, body, contentType);
+      return await getB2Storage(env).putObject(key, body, contentType);
     } catch (error) {
-      if (!isB2Configured(env)) throw error;
-      // KV không đủ -> chuyển xuống B2 bên dưới.
+      // File nhỏ (thumbnail, preview) vẫn nên lên được KV khi B2 lỗi cấu hình,
+      // để một credential sai không làm hỏng toàn bộ thư viện ảnh.
+      if (!env.MEDIA) throw error;
+      await putKvObject(env.MEDIA, key, body, contentType);
+      console.error("B2 put failed, đã ghi tạm vào KV", key, error);
+      return;
     }
   }
-  if (!isB2Configured(env)) throw Errors.server("Chưa cấu hình storage MEDIA hoặc Backblaze B2.");
-  return getB2Storage(env).putObject(key, body, contentType);
+  if (!env.MEDIA) throw Errors.server("Chưa cấu hình storage MEDIA hoặc Backblaze B2.");
+  return putKvObject(env.MEDIA, key, body, contentType);
 }
 
 export async function deleteKeys(env: Env, keys: (string | null | undefined)[]) {
@@ -380,7 +385,15 @@ export async function serveObject(
 }
 
 export async function startMultipart(env: Env, key: string, contentType: string) {
-  if (isB2Configured(env)) return getB2Storage(env).startMultipart(key, contentType);
+  if (isB2Configured(env)) {
+    try {
+      return await getB2Storage(env).startMultipart(key, contentType);
+    } catch (error) {
+      // Không có KV để đỡ thì phải báo đúng lỗi B2 cho người dùng.
+      if (!env.MEDIA) throw error;
+      console.error("B2 startMultipart failed, dùng KV cho phiên này", key, error);
+    }
+  }
   return new KvMultipartUpload(kvNamespace(env), key, `kv:${crypto.randomUUID()}`, contentType);
 }
 
