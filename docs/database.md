@@ -21,9 +21,12 @@ Binary **không** lưu trong D1.
 - `moments`
 - `jobs`
 - `login_attempts`
+- `email_verifications` — token hash, hết hạn 24 giờ, dùng một lần
 
 ## Index
 
 `user_id`, `created_at` / `taken_at` / `uploaded_at`, `media_type`, `checksum`, `deleted_at`, `album_id` (qua album_items), `device_id`.
 
-Xem `migrations/0001_init.sql`; migration `0002_workers_kv.sql` thêm và backfill `storage_key`. Các cột `r2_key` cũ tạm được giữ để rollout/rollback an toàn.
+Xem `migrations/0001_init.sql`; `0002_workers_kv.sql` thêm và backfill `storage_key`; `0003_email_verification.sql` thêm `users.email_verified` và `email_verifications`.
+
+Worker tự chạy các thay đổi incremental còn thiếu (`ensureSchema`) vì Cloudflare Git deploy **không** apply `wrangler d1 migrations`. Vẫn nên chạy `npx wrangler d1 migrations apply anp --remote` khi có token.

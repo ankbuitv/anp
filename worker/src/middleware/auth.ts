@@ -4,11 +4,47 @@ import type { AppContext, AuthedUser } from "../env";
 import { Errors } from "../lib/errors";
 import { originAllowed } from "../lib/http";
 import { sha256Hex } from "../lib/crypto";
+import { isMissingColumn } from "../lib/schema";
 
 const SESSION_COOKIE = "anp_session";
 const VAULT_COOKIE = "anp_vault";
 
 export { SESSION_COOKIE, VAULT_COOKIE };
+
+type SessionRow = {
+  sid: string;
+  device_id: string | null;
+  expires_at: number;
+  id: string;
+  name: string;
+  email: string;
+  avatar_key: string | null;
+  vault_pin_hash: string | null;
+  email_verified: number;
+  created_at: number;
+};
+
+const SESSION_SELECT = `SELECT s.id as sid, s.device_id as device_id, s.expires_at as expires_at,
+              u.id as id, u.name as name, u.email as email, u.avatar_key as avatar_key,
+              u.vault_pin_hash as vault_pin_hash, u.email_verified as email_verified, u.created_at as created_at
+       FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash = ?`;
+
+const SESSION_SELECT_LEGACY = `SELECT s.id as sid, s.device_id as device_id, s.expires_at as expires_at,
+              u.id as id, u.name as name, u.email as email, u.avatar_key as avatar_key,
+              u.vault_pin_hash as vault_pin_hash, u.created_at as created_at
+       FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash = ?`;
+
+async function loadSessionRow(db: D1Database, tokenHash: string): Promise<SessionRow | null> {
+  try {
+    return (await db.prepare(SESSION_SELECT).bind(tokenHash).first<SessionRow>()) ?? null;
+  } catch (err) {
+    if (!isMissingColumn(err, "email_verified")) throw err;
+    const row = await db.prepare(SESSION_SELECT_LEGACY).bind(tokenHash).first<Omit<SessionRow, "email_verified">>();
+    return row ? { ...row, email_verified: 1 } : null;
+  }
+}
 
 export const loadSession = createMiddleware<AppContext>(async (c, next) => {
   c.set("user", null);
@@ -24,26 +60,7 @@ export const loadSession = createMiddleware<AppContext>(async (c, next) => {
 
   if (raw) {
     const tokenHash = await sha256Hex(raw);
-    const row = await c.env.DB.prepare(
-      `SELECT s.id as sid, s.device_id as device_id, s.expires_at as expires_at,
-              u.id as id, u.name as name, u.email as email, u.avatar_key as avatar_key,
-              u.vault_pin_hash as vault_pin_hash, u.email_verified as email_verified, u.created_at as created_at
-       FROM sessions s JOIN users u ON u.id = s.user_id
-       WHERE s.token_hash = ?`,
-    )
-      .bind(tokenHash)
-      .first<{
-        sid: string;
-        device_id: string | null;
-        expires_at: number;
-        id: string;
-        name: string;
-        email: string;
-        avatar_key: string | null;
-        vault_pin_hash: string | null;
-        email_verified: number;
-        created_at: number;
-      }>();
+    const row = await loadSessionRow(c.env.DB, tokenHash);
 
     if (row && row.expires_at > Date.now()) {
       const user: AuthedUser = {

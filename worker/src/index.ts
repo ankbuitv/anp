@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { ZodError } from "zod";
 import type { AppContext } from "./env";
-import { ApiError } from "./lib/errors";
+import { ApiError, publicUnhandledMessage, zodErrorMessage } from "./lib/errors";
+import { ensureSchema } from "./lib/schema";
 import { securityHeaders } from "./middleware/security";
 import { loadSession } from "./middleware/auth";
 import { authRoutes } from "./routes/auth";
@@ -23,12 +23,22 @@ import { jobRoutes } from "./routes/jobs";
 const app = new Hono<AppContext>();
 
 app.use("*", securityHeaders);
+app.use("/api/*", async (c, next) => {
+  if (c.env.DB) {
+    try {
+      await ensureSchema(c.env.DB);
+    } catch (err) {
+      console.error("schema ensure failed", err);
+    }
+  }
+  await next();
+});
 app.use("/api/*", loadSession);
 
 app.onError((err, c) => {
-  if (err instanceof ZodError) {
-    const msg = err.issues[0]?.message || "Dữ liệu không hợp lệ.";
-    return c.json({ ok: false, error: { code: "bad_request", message: msg } }, 400);
+  const zodMsg = zodErrorMessage(err);
+  if (zodMsg) {
+    return c.json({ ok: false, error: { code: "bad_request", message: zodMsg } }, 400);
   }
   if (err instanceof ApiError) {
     return c.json({ ok: false, error: { code: err.code, message: err.message } }, err.status as 400);
@@ -37,7 +47,7 @@ app.onError((err, c) => {
     return c.json({ ok: false, error: { code: "bad_request", message: "Dữ liệu JSON không hợp lệ." } }, 400);
   }
   console.error("unhandled", err);
-  return c.json({ ok: false, error: { code: "server_error", message: "Đã xảy ra lỗi. Thử lại sau." } }, 500);
+  return c.json({ ok: false, error: { code: "server_error", message: publicUnhandledMessage(err) } }, 500);
 });
 
 app.notFound((c) => {
@@ -48,17 +58,27 @@ app.notFound((c) => {
 });
 
 const v1 = new Hono<AppContext>();
-v1.get("/health", (c) =>
-  c.json({
+v1.get("/health", async (c) => {
+  let db: "ok" | "error" | "missing" = "missing";
+  if (c.env.DB) {
+    try {
+      await c.env.DB.prepare(`SELECT 1 as n`).first();
+      db = "ok";
+    } catch {
+      db = "error";
+    }
+  }
+  return c.json({
     ok: true,
     data: {
       name: "ANP",
       version: "v1",
       time: Date.now(),
       env: c.env.ENVIRONMENT || "unknown",
+      db,
     },
-  }),
-);
+  });
+});
 
 v1.route("/auth", authRoutes);
 v1.route("/uploads", uploadRoutes);

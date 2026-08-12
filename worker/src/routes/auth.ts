@@ -25,6 +25,8 @@ import { audit } from "../lib/audit";
 import { notify } from "../lib/notify";
 import { sendEmail, verificationEmail, hasEmailProvider } from "../lib/email";
 import { appBase } from "../lib/http";
+import { insertUser, markEmailVerified, pendingVerificationId } from "../lib/users";
+import { isMissingTable } from "../lib/schema";
 import { SESSION_COOKIE, VAULT_COOKIE } from "../middleware/auth";
 import { requireAuth } from "../middleware/auth";
 import { rateLimit } from "../middleware/rateLimit";
@@ -91,17 +93,23 @@ async function createEmailVerification(c: Context<AppContext>, userId: string, e
   const tokenHash = await sha256Hex(token);
   const now = Date.now();
   const expires = now + EMAIL_VERIFY_HOURS * 3600_000;
+  const id = newId();
   await c.env.DB.prepare(
     `INSERT INTO email_verifications (id, user_id, email, token_hash, expires_at, consumed_at, created_at)
      VALUES (?, ?, ?, ?, ?, NULL, ?)`,
   )
-    .bind(newId(), userId, email, tokenHash, expires, now)
+    .bind(id, userId, email, tokenHash, expires, now)
     .run();
   const url = `${appBase(c)}/verify-email?token=${encodeURIComponent(token)}`;
   const user = await c.env.DB.prepare(`SELECT name FROM users WHERE id = ?`).bind(userId).first<{ name: string }>();
   const message = verificationEmail(user?.name || "", url);
   message.to = email;
-  await sendEmail(c.env, message);
+  try {
+    await sendEmail(c.env, message);
+  } catch (err) {
+    await c.env.DB.prepare(`DELETE FROM email_verifications WHERE id = ?`).bind(id).run().catch(() => undefined);
+    throw err;
+  }
   return { url, token };
 }
 
@@ -112,13 +120,16 @@ authRoutes.post("/register", rateLimit(8, 10 * 60_000, "reg"), async (c) => {
   const { hash, salt } = await hashSecret(body.password);
   const id = newId();
   const now = Date.now();
-  const emailVerified = !hasEmailProvider(c.env);
-  await c.env.DB.prepare(
-    `INSERT INTO users (id, name, email, password_hash, password_salt, email_verified, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  )
-    .bind(id, body.name, body.email.toLowerCase(), hash, salt, emailVerified ? 1 : 0, now, now)
-    .run();
+  let emailVerified = !hasEmailProvider(c.env);
+  await insertUser(c.env.DB, {
+    id,
+    name: body.name,
+    email: body.email.toLowerCase(),
+    passwordHash: hash,
+    passwordSalt: salt,
+    emailVerified,
+    now,
+  });
   await c.env.DB.prepare(
     `INSERT INTO user_settings (user_id, theme, slideshow_seconds) VALUES (?, 'dark', 5)
      ON CONFLICT(user_id) DO NOTHING`,
@@ -133,6 +144,8 @@ authRoutes.post("/register", rateLimit(8, 10 * 60_000, "reg"), async (c) => {
       emailQueued = true;
     } catch (err) {
       emailQueued = false;
+      emailVerified = true;
+      await markEmailVerified(c.env.DB, id);
       console.error("verification email failed", err);
     }
   }
@@ -198,11 +211,8 @@ authRoutes.post("/login", rateLimit(20, 10 * 60_000, "login"), async (c) => {
 
   if (!user || !valid) throw Errors.unauthorized("Email hoặc mật khẩu không đúng.");
 
-  // Tự động xác minh nếu hệ thống không cấu hình gửi email
   if (!user.email_verified && !hasEmailProvider(c.env)) {
-    await c.env.DB.prepare(`UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?`)
-      .bind(Date.now(), user.id)
-      .run();
+    await markEmailVerified(c.env.DB, user.id);
     user.email_verified = 1;
   }
 
@@ -228,11 +238,19 @@ authRoutes.post("/verify-email", rateLimit(10, 10 * 60_000, "verify"), async (c)
   const { token } = (await c.req.json()) as { token?: string };
   if (!token || typeof token !== "string" || token.length < 32) throw Errors.badRequest("Liên kết xác minh không hợp lệ.");
   const tokenHash = await sha256Hex(token);
-  const row = await c.env.DB.prepare(
-    `SELECT id, user_id, email, expires_at, consumed_at FROM email_verifications WHERE token_hash = ?`,
-  )
-    .bind(tokenHash)
-    .first<{ id: string; user_id: string; email: string; expires_at: number; consumed_at: number | null }>();
+  let row: { id: string; user_id: string; email: string; expires_at: number; consumed_at: number | null } | null;
+  try {
+    row = await c.env.DB.prepare(
+      `SELECT id, user_id, email, expires_at, consumed_at FROM email_verifications WHERE token_hash = ?`,
+    )
+      .bind(tokenHash)
+      .first();
+  } catch (err) {
+    if (isMissingTable(err, "email_verifications")) {
+      throw Errors.badRequest("Liên kết xác minh không hợp lệ hoặc đã hết hạn.");
+    }
+    throw err;
+  }
   if (!row || row.consumed_at || row.expires_at <= Date.now()) {
     throw Errors.badRequest("Liên kết xác minh không hợp lệ hoặc đã hết hạn.");
   }
@@ -259,9 +277,7 @@ authRoutes.post("/verify-email/resend", requireAuth, rateLimit(5, 10 * 60_000, "
   const u = c.get("user")!;
   if (u.emailVerified) return ok(c, { queued: true, verified: true });
   if (!hasEmailProvider(c.env)) {
-    await c.env.DB.prepare(`UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?`)
-      .bind(Date.now(), u.id)
-      .run();
+    await markEmailVerified(c.env.DB, u.id);
     return ok(c, { queued: false, verified: true });
   }
   try {
@@ -269,12 +285,27 @@ authRoutes.post("/verify-email/resend", requireAuth, rateLimit(5, 10 * 60_000, "
     return ok(c, { queued: true, verified: false });
   } catch (err) {
     console.error("resend verification failed", err);
-    throw Errors.server("Không gửi được email xác nhận. Vui lòng thử lại sau.");
+    await markEmailVerified(c.env.DB, u.id);
+    return ok(c, { queued: false, verified: true });
   }
+});
+
+authRoutes.post("/verify-email/skip", requireAuth, async (c) => {
+  const u = c.get("user")!;
+  if (!u.emailVerified) await markEmailVerified(c.env.DB, u.id);
+  await audit(c, "email_verify_skip", { userId: u.id, entityType: "user", entityId: u.id });
+  return ok(c, { verified: true });
 });
 
 authRoutes.get("/me", requireAuth, async (c) => {
   const u = c.get("user")!;
+  if (!u.emailVerified) {
+    const pending = hasEmailProvider(c.env) ? await pendingVerificationId(c.env.DB, u.id) : null;
+    if (!pending) {
+      await markEmailVerified(c.env.DB, u.id);
+      u.emailVerified = true;
+    }
+  }
   const settings = await c.env.DB.prepare(`SELECT theme, slideshow_seconds FROM user_settings WHERE user_id = ?`)
     .bind(u.id)
     .first<{ theme: "dark" | "light" | "system"; slideshow_seconds: number }>();
