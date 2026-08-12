@@ -2,9 +2,11 @@ import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
+  DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   S3ServiceException,
@@ -12,7 +14,7 @@ import {
   type CompletedPart,
 } from "@aws-sdk/client-s3";
 import type { Env } from "../env";
-import { Errors } from "./errors";
+import { ApiError, Errors } from "./errors";
 import { parseRange, type MpPart, type StorageBody } from "./kv";
 
 export type B2Env = Required<Pick<Env, "B2_BUCKET" | "B2_ENDPOINT" | "B2_KEY_ID" | "B2_APP_KEY">> &
@@ -54,6 +56,11 @@ function createClient(env: B2Env) {
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
   });
+}
+
+/** Gắn sẵn một B2Storage cho một env (dùng trong test để tránh gọi mạng thật). */
+export function registerB2Storage(env: object, storage: B2Storage) {
+  storageByEnv.set(env, storage);
 }
 
 export function getB2Storage(env: Env & B2Env): B2Storage {
@@ -103,6 +110,49 @@ function isMissing(error: unknown) {
   return name === "NoSuchKey" || name === "NotFound";
 }
 
+function nameOf(error: unknown): string {
+  if (typeof error === "object" && error) {
+    const e = error as { name?: string; Code?: string; code?: string };
+    return e.name || e.Code || e.code || "";
+  }
+  return "";
+}
+
+/**
+ * Đổi lỗi S3/B2 thành thông báo tiếng Việt nêu rõ nguyên nhân, để người dùng
+ * biết phải sửa cấu hình nào thay vì chỉ thấy "Không thể tải file lên".
+ */
+export function b2ErrorMessage(error: unknown): string {
+  const status = statusOf(error);
+  const name = nameOf(error);
+  if (name === "InvalidAccessKeyId" || name === "SignatureDoesNotMatch" || status === 401) {
+    return "Backblaze B2 từ chối khóa truy cập (B2_KEY_ID / B2_APP_KEY sai hoặc đã bị thu hồi).";
+  }
+  if (name === "AccessDenied" || status === 403) {
+    return "Application Key không có quyền trên bucket này (cần List/Read/Write/Delete và đúng bucket).";
+  }
+  if (name === "NoSuchBucket") return "Bucket B2 không tồn tại (kiểm tra B2_BUCKET).";
+  if (name === "PermanentRedirect" || status === 301) {
+    return "Endpoint B2 không khớp vùng của bucket (kiểm tra B2_ENDPOINT / B2_REGION).";
+  }
+  if (name === "EntityTooSmall") return "Phần multipart nhỏ hơn mức tối thiểu 5 MB của S3.";
+  if (name === "NoSuchUpload") return "Phiên multipart trên B2 đã hết hạn hoặc bị hủy; hãy tải lại file.";
+  if (status === 429 || name === "SlowDown") return "Backblaze B2 đang giới hạn tốc độ; thử lại sau ít phút.";
+  if (status && status >= 500) return "Backblaze B2 đang lỗi tạm thời; thử lại sau ít phút.";
+  const raw = error instanceof Error ? error.message : "";
+  if (/fetch failed|network|timeout/i.test(raw)) return "Không kết nối được tới Backblaze B2.";
+  return raw ? `Backblaze B2 báo lỗi: ${raw}` : "Backblaze B2 báo lỗi không xác định.";
+}
+
+/** Bọc lỗi B2 thành ApiError để client nhận đúng nguyên nhân. */
+export function toB2ApiError(error: unknown, action: string) {
+  if (error instanceof ApiError) return error;
+  const status = statusOf(error);
+  const message = `${action}: ${b2ErrorMessage(error)}`;
+  if (status === 401 || status === 403) return Errors.server(message);
+  return Errors.server(message);
+}
+
 export class B2Storage {
   private readonly bucket: string;
 
@@ -115,26 +165,75 @@ export class B2Storage {
 
   async putObject(key: string, body: StorageBody, contentType: string) {
     const bytes = await bodyToBytes(body);
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: bytes,
-        ContentLength: bytes.byteLength,
-        ContentType: contentType,
-      }),
-    );
+    try {
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: bytes,
+          ContentLength: bytes.byteLength,
+          ContentType: contentType,
+        }),
+      );
+    } catch (error) {
+      throw toB2ApiError(error, "Không ghi được file lên Backblaze B2");
+    }
   }
 
   async deleteKeys(keys: (string | null | undefined)[]) {
     const objects = [...new Set(keys.filter((key): key is string => !!key))].map((Key) => ({ Key }));
     if (!objects.length) return;
-    await this.client.send(
-      new DeleteObjectsCommand({
-        Bucket: this.bucket,
-        Delete: { Objects: objects, Quiet: true },
-      }),
-    );
+    try {
+      await this.client.send(
+        new DeleteObjectsCommand({
+          Bucket: this.bucket,
+          Delete: { Objects: objects, Quiet: true },
+        }),
+      );
+    } catch (error) {
+      // Một số key con của B2 chỉ cho phép DeleteObject đơn lẻ.
+      if (statusOf(error) !== 403 && nameOf(error) !== "AccessDenied") {
+        throw toB2ApiError(error, "Không xóa được file trên Backblaze B2");
+      }
+      for (const object of objects) {
+        await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: object.Key }));
+      }
+    }
+  }
+
+  /** Kiểm tra nhanh credentials + quyền bucket cho trang Dung lượng / health. */
+  async check(): Promise<{ ok: true } | { ok: false; message: string }> {
+    try {
+      await this.client.send(new ListObjectsV2Command({ Bucket: this.bucket, MaxKeys: 1 }));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: b2ErrorMessage(error) };
+    }
+  }
+
+  /** Tổng số object và bytes thực tế đang nằm trong bucket B2. */
+  async usage(prefix?: string): Promise<{ objects: number; bytes: number; truncated: boolean }> {
+    let objects = 0;
+    let bytes = 0;
+    let token: string | undefined;
+    let pages = 0;
+    do {
+      const page = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          ContinuationToken: token,
+          MaxKeys: 1000,
+        }),
+      );
+      for (const item of page.Contents ?? []) {
+        objects += 1;
+        bytes += Number(item.Size ?? 0);
+      }
+      token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      pages += 1;
+    } while (token && pages < 20);
+    return { objects, bytes, truncated: !!token };
   }
 
   async serveObject(
@@ -179,18 +278,23 @@ export class B2Storage {
       });
     } catch (error) {
       if (isMissing(error)) throw Errors.notFound("Không tìm thấy file.");
-      throw error;
+      throw toB2ApiError(error, "Không đọc được file từ Backblaze B2");
     }
   }
 
   async startMultipart(key: string, contentType: string) {
-    const created = await this.client.send(
-      new CreateMultipartUploadCommand({
-        Bucket: this.bucket,
-        Key: key,
-        ContentType: contentType,
-      }),
-    );
+    let created;
+    try {
+      created = await this.client.send(
+        new CreateMultipartUploadCommand({
+          Bucket: this.bucket,
+          Key: key,
+          ContentType: contentType,
+        }),
+      );
+    } catch (error) {
+      throw toB2ApiError(error, "Không mở được phiên tải lên trên Backblaze B2");
+    }
     if (!created.UploadId) throw Errors.server("Backblaze B2 không trả về upload ID.");
     return new B2MultipartUpload(this.bucket, key, created.UploadId, this.client);
   }
@@ -216,16 +320,21 @@ export class B2MultipartUpload {
 
   async uploadPart(partNumber: number, body: ArrayBuffer | Uint8Array) {
     const bytes = await bodyToBytes(body);
-    const uploaded = await this.client.send(
-      new UploadPartCommand({
-        Bucket: this.bucket,
-        Key: this.key,
-        UploadId: this.rawUploadId,
-        PartNumber: partNumber,
-        Body: bytes,
-        ContentLength: bytes.byteLength,
-      }),
-    );
+    let uploaded;
+    try {
+      uploaded = await this.client.send(
+        new UploadPartCommand({
+          Bucket: this.bucket,
+          Key: this.key,
+          UploadId: this.rawUploadId,
+          PartNumber: partNumber,
+          Body: bytes,
+          ContentLength: bytes.byteLength,
+        }),
+      );
+    } catch (error) {
+      throw toB2ApiError(error, `Không tải được phần ${partNumber} lên Backblaze B2`);
+    }
     if (!uploaded.ETag) throw Errors.server("Backblaze B2 không trả về ETag của phần tải lên.");
     return { partNumber, etag: uploaded.ETag, size: bytes.byteLength };
   }
@@ -239,14 +348,18 @@ export class B2MultipartUpload {
       ETag: part.etag,
       PartNumber: part.partNumber,
     }));
-    await this.client.send(
-      new CompleteMultipartUploadCommand({
-        Bucket: this.bucket,
-        Key: this.key,
-        UploadId: this.rawUploadId,
-        MultipartUpload: { Parts: completedParts },
-      }),
-    );
+    try {
+      await this.client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket: this.bucket,
+          Key: this.key,
+          UploadId: this.rawUploadId,
+          MultipartUpload: { Parts: completedParts },
+        }),
+      );
+    } catch (error) {
+      throw toB2ApiError(error, "Không hoàn tất được tải lên trên Backblaze B2");
+    }
   }
 
   async abort() {

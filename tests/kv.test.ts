@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
+import {
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
 import { deleteKeys, parseRange, putObject, resumeMultipart, serveObject, startMultipart } from "../worker/src/lib/kv";
+import { B2Storage, registerB2Storage } from "../worker/src/lib/b2";
 
 type Entry = { value: ArrayBuffer; metadata?: unknown };
 
@@ -47,6 +53,44 @@ function storage(kv: MemoryKv) {
   return { MEDIA: kv as unknown as KVNamespace } as import("../worker/src/env").Env;
 }
 
+/** Env có cả KV lẫn B2, với B2 được thay bằng bucket trong bộ nhớ. */
+function b2Env(kv: MemoryKv) {
+  const bucket = new Map<string, { body: Uint8Array; contentType: string }>();
+  const client = {
+    async send(command: unknown) {
+      if (command instanceof PutObjectCommand) {
+        const input = command.input;
+        bucket.set(String(input.Key), {
+          body: input.Body as Uint8Array,
+          contentType: input.ContentType || "application/octet-stream",
+        });
+        return {};
+      }
+      if (command instanceof DeleteObjectsCommand) {
+        for (const object of command.input.Delete?.Objects ?? []) bucket.delete(String(object.Key));
+        return {};
+      }
+      if (command instanceof GetObjectCommand) {
+        const entry = bucket.get(String(command.input.Key));
+        if (!entry) {
+          throw Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey", $metadata: { httpStatusCode: 404 } });
+        }
+        return { Body: entry.body, ContentLength: entry.body.byteLength, ContentType: entry.contentType };
+      }
+      return {};
+    },
+  };
+  const env = {
+    ...storage(kv),
+    B2_BUCKET: "anp-media",
+    B2_ENDPOINT: "https://s3.us-east-005.backblazeb2.com",
+    B2_KEY_ID: "application-key-id",
+    B2_APP_KEY: "application-key-secret",
+  };
+  registerB2Storage(env, new B2Storage({ B2_BUCKET: "anp-media" }, client as never));
+  return { env, bucket };
+}
+
 describe("Workers KV object storage", () => {
   it("stores and serves a single-value object", async () => {
     const kv = new MemoryKv();
@@ -91,7 +135,17 @@ describe("Workers KV object storage", () => {
     expect([...kv.entries.keys()]).toEqual(["__anp/parts/legacy/legacy-kv-upload/000001"]);
   });
 
-  it("writes to KV by preference and serves from both KV and B2 when configured", async () => {
+  it("writes to B2 instead of KV when B2 is configured", async () => {
+    const kv = new MemoryKv();
+    const { env, bucket } = b2Env(kv);
+
+    await putObject(env, "photo", "hello", "text/plain");
+    // B2 là nơi lưu chính; KV không còn nhận bản ghi mới.
+    expect(bucket.has("photo")).toBe(true);
+    expect([...kv.entries.keys()]).not.toContain("photo");
+  });
+
+  it("falls back to KV when B2 rejects the write so uploads keep working", async () => {
     const kv = new MemoryKv();
     const env = {
       ...storage(kv),
@@ -100,9 +154,21 @@ describe("Workers KV object storage", () => {
       B2_KEY_ID: "application-key-id",
       B2_APP_KEY: "application-key-secret",
     };
+    const failing = {
+      async send() {
+        throw Object.assign(new Error("Access Denied"), { name: "AccessDenied" });
+      },
+    };
+    registerB2Storage(env, new B2Storage({ B2_BUCKET: "anp-media" }, failing as never));
+
     await putObject(env, "photo", "hello", "text/plain");
-    // KV là nguồn ghi ưu tiên.
     expect([...kv.entries.keys()]).toContain("photo");
+  });
+
+  it("still serves objects that only exist in KV after switching to B2", async () => {
+    const kv = new MemoryKv();
+    await putObject(storage(kv), "photo", "hello", "text/plain");
+    const { env } = b2Env(kv);
 
     const response = await serveObject(env, "photo", new Request("https://anp.test/photo"));
     expect(response.status).toBe(200);
@@ -112,17 +178,14 @@ describe("Workers KV object storage", () => {
 
   it("deletes from both KV and B2 when configured", async () => {
     const kv = new MemoryKv();
-    const env = {
-      ...storage(kv),
-      B2_BUCKET: "anp-media",
-      B2_ENDPOINT: "https://s3.us-east-005.backblazeb2.com",
-      B2_KEY_ID: "application-key-id",
-      B2_APP_KEY: "application-key-secret",
-    };
+    await putObject(storage(kv), "photo", "hello", "text/plain");
+    const { env, bucket } = b2Env(kv);
     await putObject(env, "photo", "hello", "text/plain");
-    expect([...kv.entries.keys()]).toContain("photo");
+    expect(bucket.has("photo")).toBe(true);
+
     await deleteKeys(env, ["photo"]);
     expect(kv.entries.size).toBe(0);
+    expect(bucket.has("photo")).toBe(false);
   });
 
   it("throws not found when neither KV nor B2 can serve the object", async () => {

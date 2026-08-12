@@ -192,7 +192,7 @@ class UploadManager {
           signal: ac.signal,
           headers: { "Content-Type": "application/octet-stream" },
         });
-        if (!res.ok) throw new Error("Không thể tải file lên.");
+        if (!res.ok) throw new Error(await errorMessage(res));
         it.uploadedBytes = Math.min(it.size, start + buf.byteLength);
         it.progress = 0.08 + 0.82 * (n / parts);
         this.speedWindow.push({ t: Date.now(), b: this.stats().uploaded });
@@ -201,21 +201,10 @@ class UploadManager {
       const done = await api<{ media: Media }>(`/uploads/${init.uploadId}/complete`, { method: "POST" });
       it.media = done.media;
       const [thumb, preview] = await Promise.all([makeThumb(it.file), makePreview(it.file)]);
-      if (thumb) {
-        await fetch(`/api/v1/uploads/${done.media.id}/thumb`, {
-          method: "PUT",
-          credentials: "include",
-          body: thumb,
-          headers: { "Content-Type": "image/jpeg" },
-        });
-      }
+      // Thumbnail lỗi không làm hỏng file gốc đã lên, nhưng vẫn thử lại một lần.
+      if (thumb) await putDerived(`/api/v1/uploads/${done.media.id}/thumb`, thumb);
       if (preview && it.file.type.startsWith("image/")) {
-        await fetch(`/api/v1/uploads/${done.media.id}/thumb?kind=preview`, {
-          method: "PUT",
-          credentials: "include",
-          body: preview,
-          headers: { "Content-Type": "image/jpeg" },
-        });
+        await putDerived(`/api/v1/uploads/${done.media.id}/thumb?kind=preview`, preview);
       }
       it.status = "done";
       it.progress = 1;
@@ -231,6 +220,38 @@ class UploadManager {
       this.abort.delete(it.localId);
     }
   }
+}
+
+/** Gửi thumbnail/preview; thử lại một lần và không làm hỏng file gốc đã tải lên. */
+async function putDerived(url: string, body: Blob): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "PUT",
+        credentials: "include",
+        body,
+        headers: { "Content-Type": "image/jpeg" },
+      });
+      if (res.ok) return;
+    } catch {
+      // Thử lại lần cuối bên dưới.
+    }
+  }
+}
+
+/** Đọc thông báo lỗi thật từ Worker để hiện đúng nguyên nhân trong UploadDock. */
+async function errorMessage(res: Response): Promise<string> {
+  try {
+    const text = await res.text();
+    const json = text ? (JSON.parse(text) as { error?: { message?: string } }) : null;
+    if (json?.error?.message) return json.error.message;
+  } catch {
+    // Phản hồi không phải JSON — dùng thông báo mặc định bên dưới.
+  }
+  if (res.status === 413) return "File vượt giới hạn cho phép.";
+  if (res.status === 401) return "Phiên đăng nhập đã hết hạn.";
+  if (res.status === 429) return "Quá nhiều yêu cầu, thử lại sau.";
+  return `Không thể tải file lên (HTTP ${res.status}).`;
 }
 
 function guessMime(name: string): string {

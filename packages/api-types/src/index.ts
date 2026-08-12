@@ -191,12 +191,25 @@ export type AuditLog = {
   createdAt: number;
 };
 
+export type StorageBackendInfo = {
+  provider: "b2" | "kv" | "none";
+  bucket: string | null;
+  healthy: boolean;
+  message: string | null;
+  /** Số object thật đang nằm trên B2 (null nếu không đọc được). */
+  objects: number | null;
+  /** Dung lượng thật trên B2 (null nếu không đọc được). */
+  bytes: number | null;
+  truncated: boolean;
+};
+
 export type StorageBreakdown = {
   images: { count: number; bytes: number };
   videos: { count: number; bytes: number };
   thumbs: { count: number; bytes: number };
   other: { count: number; bytes: number };
   total: { count: number; bytes: number };
+  backend: StorageBackendInfo;
   largest: { id: string; filename: string; size: number; mediaType: string }[];
 };
 

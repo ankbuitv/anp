@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { uploadInitSchema } from "@anp/validation";
 import { CHUNK_SIZE, isAllowedMedia, mediaTypeFromMime, mimeFromName, objectKey, extOf } from "@anp/shared";
 import type { AppContext } from "../env";
-import { Errors } from "../lib/errors";
+import { ApiError, Errors } from "../lib/errors";
 import { ok } from "../lib/http";
 import { newId } from "../lib/crypto";
 import { requireAuth } from "../middleware/auth";
@@ -213,8 +213,11 @@ uploadRoutes.post("/:id/complete", async (c) => {
   const mp = resumeMultipart(c.env, row.storage_key, row.multipart_upload_id, row.mime);
   try {
     await mp.complete(parts);
-  } catch {
+  } catch (error) {
     await c.env.DB.prepare(`UPDATE upload_sessions SET status = 'failed' WHERE id = ?`).bind(row.id).run();
+    // Giữ nguyên nguyên nhân thật (sai key, thiếu quyền, hết hạn phiên...) thay vì thông báo chung chung.
+    if (error instanceof ApiError) throw error;
+    console.error("upload complete failed", error);
     throw Errors.server("Không thể hoàn tất tải lên.");
   }
 
