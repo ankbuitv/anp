@@ -26,7 +26,7 @@ import { notify } from "../lib/notify";
 import { sendEmail, verificationEmail, hasEmailProvider } from "../lib/email";
 import { appBase } from "../lib/http";
 import { insertUser, markEmailVerified, pendingVerificationId } from "../lib/users";
-import { isMissingTable } from "../lib/schema";
+import { isMissingTable, ensureSchema } from "../lib/schema";
 import { SESSION_COOKIE, VAULT_COOKIE } from "../middleware/auth";
 import { requireAuth } from "../middleware/auth";
 import { rateLimit } from "../middleware/rateLimit";
@@ -130,12 +130,30 @@ authRoutes.post("/register", rateLimit(8, 10 * 60_000, "reg"), async (c) => {
     emailVerified,
     now,
   });
-  await c.env.DB.prepare(
-    `INSERT INTO user_settings (user_id, theme, slideshow_seconds) VALUES (?, 'dark', 5)
-     ON CONFLICT(user_id) DO NOTHING`,
-  )
-    .bind(id)
-    .run();
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO user_settings (user_id, theme, slideshow_seconds) VALUES (?, 'dark', 5)
+       ON CONFLICT(user_id) DO NOTHING`,
+    )
+      .bind(id)
+      .run();
+  } catch (err) {
+    if (isMissingTable(err, "user_settings")) {
+      try {
+        await ensureSchema(c.env.DB);
+        await c.env.DB.prepare(
+          `INSERT INTO user_settings (user_id, theme, slideshow_seconds) VALUES (?, 'dark', 5)
+           ON CONFLICT(user_id) DO NOTHING`,
+        )
+          .bind(id)
+          .run();
+      } catch {
+        // không chặn đăng ký nếu vẫn thiếu bảng, settings sẽ dùng mặc định
+      }
+    } else {
+      console.error("user_settings insert failed", err);
+    }
+  }
   await createSession(c, id, { name: "Trình duyệt", type: "web", platform: c.req.header("user-agent") || "" });
   let emailQueued = false;
   if (!emailVerified) {
@@ -306,9 +324,25 @@ authRoutes.get("/me", requireAuth, async (c) => {
       u.emailVerified = true;
     }
   }
-  const settings = await c.env.DB.prepare(`SELECT theme, slideshow_seconds FROM user_settings WHERE user_id = ?`)
-    .bind(u.id)
-    .first<{ theme: "dark" | "light" | "system"; slideshow_seconds: number }>();
+  let settings: { theme: "dark" | "light" | "system"; slideshow_seconds: number } | null = null;
+  try {
+    settings = await c.env.DB.prepare(`SELECT theme, slideshow_seconds FROM user_settings WHERE user_id = ?`)
+      .bind(u.id)
+      .first<{ theme: "dark" | "light" | "system"; slideshow_seconds: number }>();
+  } catch (err) {
+    if (isMissingTable(err, "user_settings")) {
+      try {
+        await ensureSchema(c.env.DB);
+        settings = await c.env.DB.prepare(`SELECT theme, slideshow_seconds FROM user_settings WHERE user_id = ?`)
+          .bind(u.id)
+          .first<{ theme: "dark" | "light" | "system"; slideshow_seconds: number }>();
+      } catch {
+        settings = null;
+      }
+    } else {
+      throw err;
+    }
+  }
   return ok(c, {
     user: userPayload(u),
     vaultUnlocked: c.get("vaultUnlocked"),
@@ -346,17 +380,47 @@ authRoutes.post("/password", requireAuth, async (c) => {
 
 authRoutes.patch("/settings", requireAuth, async (c) => {
   const body = settingsSchema.parse(await c.req.json());
-  const cur = await c.env.DB.prepare(`SELECT theme, slideshow_seconds FROM user_settings WHERE user_id = ?`)
-    .bind(c.get("user")!.id)
-    .first<{ theme: string; slideshow_seconds: number }>();
+  let cur: { theme: string; slideshow_seconds: number } | null = null;
+  try {
+    cur = await c.env.DB.prepare(`SELECT theme, slideshow_seconds FROM user_settings WHERE user_id = ?`)
+      .bind(c.get("user")!.id)
+      .first<{ theme: string; slideshow_seconds: number }>();
+  } catch (err) {
+    if (isMissingTable(err, "user_settings")) {
+      try {
+        await ensureSchema(c.env.DB);
+        cur = await c.env.DB.prepare(`SELECT theme, slideshow_seconds FROM user_settings WHERE user_id = ?`)
+          .bind(c.get("user")!.id)
+          .first<{ theme: string; slideshow_seconds: number }>();
+      } catch {
+        cur = null;
+      }
+    } else {
+      throw err;
+    }
+  }
   const theme = body.theme ?? cur?.theme ?? "dark";
   const ss = body.slideshowSeconds ?? cur?.slideshow_seconds ?? 5;
-  await c.env.DB.prepare(
-    `INSERT INTO user_settings (user_id, theme, slideshow_seconds) VALUES (?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET theme = excluded.theme, slideshow_seconds = excluded.slideshow_seconds`,
-  )
-    .bind(c.get("user")!.id, theme, ss)
-    .run();
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO user_settings (user_id, theme, slideshow_seconds) VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET theme = excluded.theme, slideshow_seconds = excluded.slideshow_seconds`,
+    )
+      .bind(c.get("user")!.id, theme, ss)
+      .run();
+  } catch (err) {
+    if (isMissingTable(err, "user_settings")) {
+      await ensureSchema(c.env.DB);
+      await c.env.DB.prepare(
+        `INSERT INTO user_settings (user_id, theme, slideshow_seconds) VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET theme = excluded.theme, slideshow_seconds = excluded.slideshow_seconds`,
+      )
+        .bind(c.get("user")!.id, theme, ss)
+        .run();
+    } else {
+      throw err;
+    }
+  }
   return ok(c, { theme, slideshowSeconds: ss });
 });
 
