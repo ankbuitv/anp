@@ -1,0 +1,63 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+
+# build
+dist
+build
+.wrangler
+.mf
+.dev.vars
+.turbo
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.wrangler/state
+
+# media / binaries
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.heic
+*.heif
+*.avif
+*.tif
+*.tiff
+*.bmp
+*.mp4
+*.mov
+*.webm
+*.mkv
+*.avi
+*.m4v
+*.zip
+!apps/web/src/assets/**/*.svg
+!docs/**/*.png
+
+# logs / cache
+logs
+*.log
+npm-debug.log*
+.cache
+.vite
+coverage
+.eslintcache
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# test artifacts
+tmp
+temp
+.test-data

@@ -1,0 +1,21 @@
+{
+  "name": "@anp/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler d1 migrations apply anp --local --config ../wrangler.toml && wrangler dev --config ../wrangler.toml --port 8787 --ip 0.0.0.0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anp/api-types": "0.1.0",
+    "@anp/shared": "0.1.0",
+    "@anp/validation": "0.1.0",
+    "hono": "^4.7.4",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["@cloudflare/workers-types"],
+    "lib": ["ES2022"],
+    "rootDir": "..",
+    "paths": {
+      "@anp/shared": ["../packages/shared/src/index.ts"],
+      "@anp/validation": ["../packages/validation/src/index.ts"],
+      "@anp/api-types": ["../packages/api-types/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "../packages/**/*.ts"]
+}
