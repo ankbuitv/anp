@@ -16,18 +16,18 @@
                      │
           ┌──────────┴──────────┐
           │                     │
-       Cloudflare D1         Cloudflare R2
-       Metadata              Original / thumb / preview
+       Cloudflare D1       Cloudflare Workers KV
+       Metadata            Original / thumb / preview
 ```
 
 ## Nguyên tắc
 
 - API độc lập frontend. Web, Desktop, Mobile dùng chung `/api/v1`.
 - D1 chỉ chứa metadata. Không lưu binary.
-- R2 private. Client không đọc bucket công khai.
+- Namespace KV không được client truy cập trực tiếp; mọi request đi qua Worker.
 - Original giữ nguyên (EXIF không bị strip).
-- Thumbnail / preview do client tạo, Worker lưu object riêng.
-- Upload lớn: multipart qua R2 binding, chunk 8 MB, pause / resume / retry.
+- Thumbnail / preview do client tạo, Worker lưu value riêng.
+- Upload lớn: chia part 8 MB trong KV, hỗ trợ pause / resume / retry.
 - Session: cookie HttpOnly + `Authorization: Bearer` cho Desktop/Mobile.
 
 ## Monorepo
@@ -41,7 +41,7 @@
 | `packages/validation` | Zod schema dùng cả 2 phía |
 | `migrations` | D1 SQL |
 
-## Upload
+## Upload và layout KV
 
 ```
 Browser  →  POST /uploads (auth + checksum + EXIF)
@@ -49,15 +49,17 @@ Browser  →  POST /uploads (auth + checksum + EXIF)
 Browser  →  PUT  /uploads/:id/parts/:n   (8 MB)
          →  POST /uploads/:id/complete
          →  PUT  /uploads/:id/thumb
-Worker   →  R2 complete multipart
+Worker   →  KV parts + manifest
          →  D1 media + version + audit
 ```
 
-Nếu có `R2_ACCESS_KEY_ID` có thể bổ sung presigned PUT sau này. Phase 1 không bắt buộc — binding đủ để chạy local và production.
+Storage key logic giữ dạng `u/{userId}/o/{mediaId}/{original,thumb,preview}.*`. File nhỏ nằm trong một KV value. File lớn có manifest tại storage key và các value part dưới prefix `__anp/parts/`; client không nhìn thấy layout nội bộ này.
 
 ## Media serving
 
-`GET /api/v1/media/:id/{thumb,preview,file}` kiểm tra session hoặc share token, stream từ R2, hỗ trợ `Range` cho video.
+`GET /api/v1/media/:id/{thumb,preview,file}` kiểm tra session hoặc share token rồi stream từ Workers KV. Với file chia part, Worker chỉ đọc các part giao với HTTP `Range`, phù hợp phát video và tải tiếp.
+
+Workers KV có tính nhất quán eventual và quota theo gói. Đây là đánh đổi của phương án không dùng R2; xem `docs/cloudflare.md`.
 
 ## Private Vault
 

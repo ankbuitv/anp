@@ -5,7 +5,7 @@ Nhánh: `arena/019ff37a-anp`
 
 ## 1. Architecture
 
-SPA React (Vite) + REST `/api/v1` trên Cloudflare Workers. D1 metadata, R2 object (private). Upload multipart 8 MB qua R2 binding, resume theo checksum. Session cookie HttpOnly + Bearer. Chi tiết: `docs/architecture.md`.
+SPA React (Vite) + REST `/api/v1` trên Cloudflare Workers. D1 metadata, Workers KV object (private qua binding). Upload multipart 8 MB qua KV, resume theo checksum. Session cookie HttpOnly + Bearer. Chi tiết: `docs/architecture.md`.
 
 ## 2. Files created
 
@@ -21,12 +21,12 @@ Xem `migrations/0001_init.sql` và `docs/database.md`. Đủ bảng Phase 1 + fo
 
 ## 5. Cloudflare configuration
 
-`wrangler.toml`: D1 `anp`, R2 `anp-media`, assets `apps/web/dist`, `run_worker_first = ["/api/*"]`.  
-`database_id` hiện là placeholder — **cần** `wrangler d1 create anp`.
+`wrangler.toml`: D1 `anp`, Workers KV binding `MEDIA`, assets `apps/web/dist`, `run_worker_first = ["/api/*"]`.
+`database_id` và KV namespace `id` production đã được cấu hình.
 
-## 6. R2
+## 6. Workers KV
 
-Binding `BUCKET`. Key `u/{userId}/o/{mediaId}/{original,thumb,preview}.*`. Không public. Serve qua Worker + Range.
+Binding `MEDIA`. Key `u/{userId}/o/{mediaId}/{original,thumb,preview}.*`. Không public. File lớn chia part 8 MB; serve qua Worker + Range.
 
 ## 7. D1
 
@@ -50,8 +50,6 @@ Migrations trong `migrations/`. Local: `npm run db:migrate:local`. Remote: workf
 **Chưa deploy production.** Thiếu:
 
 - Cloudflare account / API token
-- D1 database id thật
-- R2 bucket production (lệnh tạo)
 - Custom domain `p.ankb.qzz.io` gắn Worker
 
 Không giả lập deployment.
@@ -64,7 +62,7 @@ Không giả lập deployment.
 - Auto backup camera: foundation API only
 - Version history: lưu metadata/object version, chưa UI khôi phục file cũ đầy đủ
 - Rate limit in-memory theo isolate (bổ sung WAF khi có zone)
-- Turnstile / R2 presign: cần secret, chưa bật
+- Turnstile: cần secret, chưa bật; Workers KV có quota và eventual consistency
 - Bản đồ: OSM/Carto, cluster đơn giản
 
 ## 13. Next phase

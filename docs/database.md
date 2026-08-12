@@ -9,7 +9,7 @@ Binary **không** lưu trong D1.
 - `vault_sessions` — PIN session 30 phút
 - `devices` — web / desktop / ios / android
 - `user_settings`
-- `media` — metadata, EXIF, GPS, checksum, R2 keys, favorite, private, deleted_at
+- `media` — metadata, EXIF, GPS, checksum, storage keys, favorite, private, deleted_at
 - `media_versions` — lịch sử metadata / object
 - `albums`, `album_items`
 - `shares`, `share_items` — token ngẫu nhiên, code `XXXX-XXXX`
@@ -26,4 +26,4 @@ Binary **không** lưu trong D1.
 
 `user_id`, `created_at` / `taken_at` / `uploaded_at`, `media_type`, `checksum`, `deleted_at`, `album_id` (qua album_items), `device_id`.
 
-Xem `migrations/0001_init.sql`.
+Xem `migrations/0001_init.sql`; migration `0002_workers_kv.sql` thêm và backfill `storage_key`. Các cột `r2_key` cũ tạm được giữ để rollout/rollback an toàn.
