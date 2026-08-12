@@ -7,7 +7,7 @@ import { ok } from "../lib/http";
 import { dropCode, newId } from "../lib/crypto";
 import { requireAuth } from "../middleware/auth";
 import { rateLimit } from "../middleware/rateLimit";
-import { putObject, serveObject } from "../lib/r2";
+import { putObject, serveObject } from "../lib/kv";
 import { notify } from "../lib/notify";
 
 export const dropRoutes = new Hono<AppContext>();
@@ -93,12 +93,12 @@ dropRoutes.post("/:id/files", rateLimit(60, 60_000, "drop-up"), async (c) => {
   }
   const fid = newId();
   const key = dropKey(row.id, fid, extOf(filename));
-  await putObject(c.env.BUCKET, key, buf, mime);
+  await putObject(c.env.MEDIA, key, buf, mime);
   await c.env.DB.prepare(
-    `INSERT INTO drop_files (id, session_id, filename, size, mime, r2_key, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'ready', ?)`,
+    `INSERT INTO drop_files (id, session_id, filename, size, mime, r2_key, storage_key, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'ready', ?)`,
   )
-    .bind(fid, row.id, filename, buf.byteLength, mime, key, Date.now())
+    .bind(fid, row.id, filename, buf.byteLength, mime, key, key, Date.now())
     .run();
   await c.env.DB.prepare(`UPDATE drop_sessions SET status = 'transferring' WHERE id = ?`).bind(row.id).run();
   if (row.user_id) {
@@ -113,8 +113,8 @@ dropRoutes.get("/:id/files/:fid", async (c) => {
      WHERE f.id = ? AND f.session_id = ?`,
   )
     .bind(c.req.param("fid"), c.req.param("id"))
-    .first<{ r2_key: string; filename: string; mime: string | null; expires_at: number }>();
+    .first<{ storage_key: string; filename: string; mime: string | null; expires_at: number }>();
   if (!file) throw Errors.notFound();
   if (file.expires_at < Date.now()) throw Errors.gone();
-  return serveObject(c.env.BUCKET, file.r2_key, c.req.raw, file.mime || "application/octet-stream", file.filename);
+  return serveObject(c.env.MEDIA, file.storage_key, c.req.raw, file.mime || "application/octet-stream", file.filename);
 });

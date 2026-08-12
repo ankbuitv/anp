@@ -12,7 +12,7 @@ export type MediaRow = {
   height: number | null;
   duration: number | null;
   checksum: string;
-  r2_key: string;
+  storage_key: string;
   thumb_key: string | null;
   preview_key: string | null;
   thumb_size: number | null;

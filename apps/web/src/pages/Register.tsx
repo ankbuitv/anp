@@ -35,7 +35,7 @@ export function Register() {
   }
 
   return (
-    <AuthFrame title="Tạo tài khoản" sub="Thư viện riêng, không công khai R2, không AI.">
+    <AuthFrame title="Tạo tài khoản" sub="Thư viện riêng, media không công khai, không AI.">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Tên">
           <Input value={name} onChange={(e) => setName(e.target.value)} required />

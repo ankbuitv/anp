@@ -8,7 +8,7 @@ import { newId } from "../lib/crypto";
 import { requireAuth } from "../middleware/auth";
 import { rateLimit } from "../middleware/rateLimit";
 import { albumsForMedia, getMedia, publicMedia, type MediaRow } from "../lib/media";
-import { startMultipart, resumeMultipart, putObject } from "../lib/r2";
+import { startMultipart, resumeMultipart, putObject } from "../lib/kv";
 import { audit } from "../lib/audit";
 import { notify } from "../lib/notify";
 import { rebuildMoments } from "../lib/moments";
@@ -16,7 +16,7 @@ import { rebuildMoments } from "../lib/moments";
 export const uploadRoutes = new Hono<AppContext>();
 uploadRoutes.use("*", requireAuth);
 
-type Part = { partNumber: number; etag: string };
+type Part = { partNumber: number; etag: string; size: number };
 
 function parseParts(raw: string | null): Part[] {
   if (!raw) return [];
@@ -70,7 +70,7 @@ uploadRoutes.post("/", rateLimit(120, 60_000, "up-init"), async (c) => {
   const mediaId = newId();
   const ext = extOf(body.filename) || (type === "video" ? "mp4" : "jpg");
   const key = objectKey(user.id, mediaId, "original", ext);
-  const mp = await startMultipart(c.env.BUCKET, key, mime);
+  const mp = await startMultipart(c.env.MEDIA, key, mime);
   const now = Date.now();
   const meta = {
     isPrivate: !!body.isPrivate,
@@ -81,16 +81,17 @@ uploadRoutes.post("/", rateLimit(120, 60_000, "up-init"), async (c) => {
   };
   await c.env.DB.prepare(
     `INSERT INTO upload_sessions
-      (id, user_id, filename, size, mime, checksum, r2_key, multipart_upload_id, status, uploaded_parts, uploaded_bytes, created_at, metadata_json, media_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', '[]', 0, ?, ?, ?)`,
+      (id, user_id, filename, size, mime, checksum, r2_key, storage_key, multipart_upload_id, status, uploaded_parts, uploaded_bytes, created_at, metadata_json, media_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '[]', 0, ?, ?, ?)`,
   )
     .bind(
-      mp.uploadId ? mediaId : mediaId,
+      mediaId,
       user.id,
       body.filename,
       body.size,
       mime,
       body.checksum.toLowerCase(),
+      key,
       key,
       mp.uploadId,
       now,
@@ -146,7 +147,7 @@ uploadRoutes.put("/:id/parts/:n", rateLimit(600, 60_000, "up-part"), async (c) =
     .first<{
       id: string;
       status: string;
-      r2_key: string;
+      storage_key: string;
       multipart_upload_id: string | null;
       uploaded_parts: string | null;
       uploaded_bytes: number;
@@ -163,11 +164,11 @@ uploadRoutes.put("/:id/parts/:n", rateLimit(600, 60_000, "up-part"), async (c) =
 
   const buf = await c.req.arrayBuffer();
   if (buf.byteLength === 0) throw Errors.badRequest("Phần trống.");
-  if (buf.byteLength > CHUNK_SIZE + 64 * 1024) throw Errors.payload("Phần vượt kích thước cho phép.");
+  if (buf.byteLength > CHUNK_SIZE) throw Errors.payload("Phần vượt kích thước cho phép.");
 
-  const mp = resumeMultipart(c.env.BUCKET, row.r2_key, row.multipart_upload_id);
+  const mp = resumeMultipart(c.env.MEDIA, row.storage_key, row.multipart_upload_id);
   const uploaded = await mp.uploadPart(n, buf);
-  parts.push({ partNumber: n, etag: uploaded.etag });
+  parts.push({ partNumber: n, etag: uploaded.etag, size: uploaded.size });
   parts.sort((a, b) => a.partNumber - b.partNumber);
   const uploadedBytes = row.uploaded_bytes + buf.byteLength;
   await c.env.DB.prepare(
@@ -189,7 +190,7 @@ uploadRoutes.post("/:id/complete", async (c) => {
       size: number;
       mime: string;
       checksum: string;
-      r2_key: string;
+      storage_key: string;
       multipart_upload_id: string | null;
       uploaded_parts: string | null;
       metadata_json: string | null;
@@ -202,10 +203,16 @@ uploadRoutes.post("/:id/complete", async (c) => {
   }
   const parts = parseParts(row.uploaded_parts);
   if (!parts.length || !row.multipart_upload_id) throw Errors.badRequest("Chưa có dữ liệu tải lên.");
+  if (parts.some((part, index) => part.partNumber !== index + 1 || !part.size)) {
+    throw Errors.badRequest("Danh sách phần tải lên không hợp lệ.");
+  }
+  if (parts.reduce((total, part) => total + part.size, 0) !== row.size) {
+    throw Errors.badRequest("Dữ liệu tải lên chưa đủ.");
+  }
 
-  const mp = resumeMultipart(c.env.BUCKET, row.r2_key, row.multipart_upload_id);
+  const mp = resumeMultipart(c.env.MEDIA, row.storage_key, row.multipart_upload_id, row.mime);
   try {
-    await mp.complete(parts.map((p) => ({ partNumber: p.partNumber, etag: p.etag })));
+    await mp.complete(parts);
   } catch {
     await c.env.DB.prepare(`UPDATE upload_sessions SET status = 'failed' WHERE id = ?`).bind(row.id).run();
     throw Errors.server("Không thể hoàn tất tải lên.");
@@ -220,10 +227,10 @@ uploadRoutes.post("/:id/complete", async (c) => {
   await c.env.DB.prepare(
     `INSERT INTO media (
       id, user_id, filename, original_name, mime, media_type, size, width, height, duration,
-      checksum, r2_key, taken_at, uploaded_at, camera_make, camera_model, lens, iso, aperture,
+      checksum, r2_key, storage_key, taken_at, uploaded_at, camera_make, camera_model, lens, iso, aperture,
       shutter_speed, focal_length, orientation, lat, lng, location_name, photographer,
       is_favorite, is_private, device_id, version
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1)`,
   )
     .bind(
       mediaId,
@@ -237,7 +244,8 @@ uploadRoutes.post("/:id/complete", async (c) => {
       exif.height ?? null,
       exif.duration ?? null,
       row.checksum,
-      row.r2_key,
+      row.storage_key,
+      row.storage_key,
       exif.takenAt ?? null,
       now,
       exif.cameraMake ?? null,
@@ -258,10 +266,10 @@ uploadRoutes.post("/:id/complete", async (c) => {
     .run();
 
   await c.env.DB.prepare(
-    `INSERT INTO media_versions (id, media_id, version, r2_key, checksum, size, metadata_json, created_at)
-     VALUES (?, ?, 1, ?, ?, ?, ?, ?)`,
+    `INSERT INTO media_versions (id, media_id, version, r2_key, storage_key, checksum, size, metadata_json, created_at)
+     VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(newId(), mediaId, row.r2_key, row.checksum, row.size, JSON.stringify({ source: "upload" }), now)
+    .bind(newId(), mediaId, row.storage_key, row.storage_key, row.checksum, row.size, JSON.stringify({ source: "upload" }), now)
     .run();
 
   await c.env.DB.prepare(`UPDATE upload_sessions SET status = 'completed', completed_at = ?, media_id = ? WHERE id = ?`)
@@ -291,7 +299,7 @@ uploadRoutes.put("/:id/thumb", async (c) => {
   const key = objectKey(user.id, id, kind, ext);
   const buf = await c.req.arrayBuffer();
   if (buf.byteLength === 0 || buf.byteLength > 8 * 1024 * 1024) throw Errors.payload();
-  await putObject(c.env.BUCKET, key, buf, "image/jpeg");
+  await putObject(c.env.MEDIA, key, buf, "image/jpeg");
   if (kind === "preview") {
     await c.env.DB.prepare(`UPDATE media SET preview_key = ?, preview_size = ? WHERE id = ? AND user_id = ?`)
       .bind(key, buf.byteLength, id, user.id)
@@ -307,11 +315,11 @@ uploadRoutes.put("/:id/thumb", async (c) => {
 uploadRoutes.delete("/:id", async (c) => {
   const row = await c.env.DB.prepare(`SELECT * FROM upload_sessions WHERE id = ? AND user_id = ?`)
     .bind(c.req.param("id"), c.get("user")!.id)
-    .first<{ id: string; r2_key: string; multipart_upload_id: string | null; status: string }>();
+    .first<{ id: string; storage_key: string; multipart_upload_id: string | null; status: string }>();
   if (!row) throw Errors.notFound();
   if (row.multipart_upload_id && row.status !== "completed") {
     try {
-      await resumeMultipart(c.env.BUCKET, row.r2_key, row.multipart_upload_id).abort();
+      await resumeMultipart(c.env.MEDIA, row.storage_key, row.multipart_upload_id).abort();
     } catch {}
   }
   await c.env.DB.prepare(`UPDATE upload_sessions SET status = 'cancelled' WHERE id = ?`).bind(row.id).run();

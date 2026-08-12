@@ -7,7 +7,7 @@ import { newId } from "../lib/crypto";
 import { requireAuth } from "../middleware/auth";
 import { notify } from "../lib/notify";
 import { audit } from "../lib/audit";
-import { serveObject } from "../lib/r2";
+import { putObject, serveObject } from "../lib/kv";
 import type { MediaRow } from "../lib/media";
 
 export const jobRoutes = new Hono<AppContext>();
@@ -60,9 +60,9 @@ jobRoutes.post("/export", async (c) => {
 jobRoutes.get("/:id/file", async (c) => {
   const job = await c.env.DB.prepare(`SELECT * FROM jobs WHERE id = ? AND user_id = ?`)
     .bind(c.req.param("id"), c.get("user")!.id)
-    .first<{ r2_key: string | null; status: string }>();
-  if (!job?.r2_key || job.status !== "completed") throw Errors.notFound("File xuất chưa sẵn sàng.");
-  return serveObject(c.env.BUCKET, job.r2_key, c.req.raw, "application/zip", `ANP_Album_${new Date().toISOString().slice(0, 10)}.zip`);
+    .first<{ storage_key: string | null; status: string }>();
+  if (!job?.storage_key || job.status !== "completed") throw Errors.notFound("File xuất chưa sẵn sàng.");
+  return serveObject(c.env.MEDIA, job.storage_key, c.req.raw, "application/zip", `ANP_Album_${new Date().toISOString().slice(0, 10)}.zip`);
 });
 
 async function runExport(env: AppContext["Bindings"], userId: string, jobId: string, albumId?: string, all?: boolean) {
@@ -115,11 +115,11 @@ hoặc tải từng file từ thư viện web.
 File metadata.json mô tả toàn bộ media đã xuất.
 `;
     const payload = JSON.stringify({ readme, metadata }, null, 2);
-    await env.BUCKET.put(key, payload, { httpMetadata: { contentType: "application/json" } });
+    await putObject(env.MEDIA, key, payload, "application/json");
     await env.DB.prepare(
-      `UPDATE jobs SET status = 'completed', progress = 100, r2_key = ?, result_json = ?, completed_at = ? WHERE id = ?`,
+      `UPDATE jobs SET status = 'completed', progress = 100, r2_key = ?, storage_key = ?, result_json = ?, completed_at = ? WHERE id = ?`,
     )
-      .bind(key, JSON.stringify({ count: rows.length, download: `/api/v1/jobs/${jobId}/file` }), Date.now(), jobId)
+      .bind(key, key, JSON.stringify({ count: rows.length, download: `/api/v1/jobs/${jobId}/file` }), Date.now(), jobId)
       .run();
     await notify(env.DB, userId, "export_done", "Xuất dữ liệu hoàn tất", `${rows.length} mục đã sẵn sàng.`);
   } catch (e) {

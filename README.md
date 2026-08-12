@@ -5,12 +5,12 @@ Hệ thống lưu trữ, quản lý, sao lưu và chia sẻ **ảnh / video cá 
 - Giao diện: **Tiếng Việt**
 - Production: **https://p.ankb.qzz.io**
 - Phase hiện tại: **1 — Web + REST API**
-- Không AI. Không lưu media trong GitHub. Không public R2.
+- Không AI. Không lưu media trong GitHub. Media nằm trong Workers KV và chỉ đọc qua Worker.
 
 ```
 Web / Desktop / Mobile  →  /api/v1  →  Cloudflare Worker
-                                      ├─ D1  metadata
-                                      └─ R2  original + thumb + preview
+                                      ├─ D1          metadata
+                                      └─ Workers KV  original + thumb + preview
 ```
 
 ## Chạy local
@@ -28,9 +28,9 @@ npm run dev
 | Tiến trình | Địa chỉ |
 | --- | --- |
 | Web (Vite) | http://localhost:5173 |
-| API (Wrangler, D1/R2 local) | http://localhost:8787 |
+| API (Wrangler, D1/KV local) | http://localhost:8787 |
 
-Mở Vite, đăng ký tài khoản, kéo thả ảnh. File nằm trong R2 giả lập của Wrangler (`.wrangler/`), không commit.
+Mở Vite, đăng ký tài khoản, kéo thả ảnh. D1 và Workers KV được Wrangler giả lập trong `.wrangler/`, không commit.
 
 ```bash
 npm test
@@ -41,15 +41,13 @@ npm run build
 
 ## Việc cần để lên production
 
-Chưa deploy được nếu thiếu:
-
-1. Tài khoản Cloudflare + quyền Workers / D1 / R2
-2. `wrangler d1 create anp` → thay `database_id` trong `wrangler.toml`
-3. `wrangler r2 bucket create anp-media`
+1. Tài khoản Cloudflare + API token có quyền Workers / D1 / Workers KV
+2. D1 `f1ae2e6b-4450-47c5-953d-3a6fe5924442`
+3. Workers KV `6fe12765c4714494ae4a0827393a0c78`
 4. Custom domain `p.ankb.qzz.io` trỏ Worker
 5. GitHub secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
 
-Tuỳ chọn (presigned S3, Turnstile): xem `.env.example`.
+Storage dùng Workers KV thay R2, vì vậy không cần tạo R2 bucket, S3 credentials hay thẻ thanh toán R2. Xem quota và lưu ý eventual consistency tại [docs/cloudflare.md](docs/cloudflare.md).
 
 Không có các credential trên thì **không tuyên bố đã deploy**.
 
@@ -62,11 +60,10 @@ anp/
 │   ├── api-types/         Type dùng lại Desktop/Mobile
 │   ├── shared/
 │   └── validation/
-├── worker/                Hono + D1 + R2
+├── worker/                Hono + D1 + Workers KV
 ├── migrations/
 ├── tests/
-├── docs/
-└── .github/workflows/
+└── docs/
 ```
 
 Tài liệu: [docs/architecture.md](docs/architecture.md) · [docs/api.md](docs/api.md) · [docs/database.md](docs/database.md) · [docs/cloudflare.md](docs/cloudflare.md) · [docs/deployment.md](docs/deployment.md) · [docs/security.md](docs/security.md) · [docs/desktop-roadmap.md](docs/desktop-roadmap.md) · [docs/mobile-roadmap.md](docs/mobile-roadmap.md)

@@ -10,7 +10,7 @@
 - MIME + extension allow-list
 - Giới hạn 5 GB / file, 1000 file / lượt, chunk 8 MB
 - Object key: `u/{userId}/o/{mediaId}/…` — không dùng tên file người dùng
-- R2 private, download qua Worker / Range
+- Workers KV chỉ truy cập qua binding; download qua Worker / Range
 - Share token ngẫu nhiên, thu hồi, hết hạn, quyền view|download
 - ZIP: chặn `..`, ổ đĩa, số entry, tỷ lệ nén
 - SQL bind parameters
@@ -23,4 +23,4 @@
 - Turnstile (cần `TURNSTILE_SECRET`)
 - Cloudflare WAF / Rate Limiting ruleset trên zone
 - CSRF token riêng (SameSite + Origin đủ cho SPA same-site)
-- Presigned S3 URL (cần R2 API token)
+- Theo dõi quota và cảnh báo eventual consistency của Workers KV
