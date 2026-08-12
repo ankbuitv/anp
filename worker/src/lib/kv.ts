@@ -319,13 +319,45 @@ function kvNamespace(env: Env): KVNamespace {
 }
 
 export async function putObject(env: Env, key: string, body: StorageBody, contentType: string) {
-  if (isB2Configured(env)) return getB2Storage(env).putObject(key, body, contentType);
-  return putKvObject(kvNamespace(env), key, body, contentType);
+  // Ưu tiên ghi vào KV; nếu KV không đủ/chịu được (lỗi) thì mới sang B2.
+  if (env.MEDIA) {
+    try {
+      return await putKvObject(env.MEDIA, key, body, contentType);
+    } catch (error) {
+      if (!isB2Configured(env)) throw error;
+      // KV không đủ -> chuyển xuống B2 bên dưới.
+    }
+  }
+  if (!isB2Configured(env)) throw Errors.server("Chưa cấu hình storage MEDIA hoặc Backblaze B2.");
+  return getB2Storage(env).putObject(key, body, contentType);
 }
 
 export async function deleteKeys(env: Env, keys: (string | null | undefined)[]) {
-  if (isB2Configured(env)) return getB2Storage(env).deleteKeys(keys);
-  return deleteKvKeys(kvNamespace(env), keys);
+  // Xoá ở cả hai nguồn để không còn object sót lại khi đọc song song.
+  const tasks: Promise<void>[] = [];
+  if (env.MEDIA) tasks.push(deleteKvKeys(env.MEDIA, keys).catch(() => {}));
+  if (isB2Configured(env)) tasks.push(getB2Storage(env).deleteKeys(keys).catch(() => {}));
+  await Promise.all(tasks);
+}
+
+/** Đọc song song cả KV và B2, trả nguồn nào trả lời được trước. */
+async function serveBoth(candidates: Promise<Response>[]): Promise<Response> {
+  return new Promise<Response>((resolve, reject) => {
+    let pending = candidates.length;
+    const failures: unknown[] = [];
+    for (const candidate of candidates) {
+      candidate.then(
+        (response) => resolve(response),
+        (error) => {
+          failures.push(error);
+          if (--pending === 0) {
+            const non404 = failures.find((f) => !(f instanceof ApiError) || f.status !== 404);
+            reject(non404 ?? Errors.notFound("Không tìm thấy file."));
+          }
+        },
+      );
+    }
+  });
 }
 
 export async function serveObject(
@@ -335,16 +367,16 @@ export async function serveObject(
   fallbackType = "application/octet-stream",
   filename?: string,
 ): Promise<Response> {
-  if (isB2Configured(env)) {
-    try {
-      return await getB2Storage(env).serveObject(key, request, fallbackType, filename);
-    } catch (error) {
-      // Read-only fallback covers a rollout race or an upload session opened on
-      // KV before B2 was enabled. New writes still always go to B2.
-      if (!(error instanceof ApiError) || error.status !== 404 || !env.MEDIA) throw error;
-    }
+  // Đọc đồng thời cả KV lẫn B2 (nếu có); lấy nguồn phản hồi được trước.
+  const candidates: Promise<Response>[] = [];
+  if (env.MEDIA) {
+    candidates.push(serveKvObject(env.MEDIA, key, request, fallbackType, filename));
   }
-  return serveKvObject(kvNamespace(env), key, request, fallbackType, filename);
+  if (isB2Configured(env)) {
+    candidates.push(getB2Storage(env).serveObject(key, request, fallbackType, filename));
+  }
+  if (!candidates.length) throw Errors.server("Chưa cấu hình storage MEDIA hoặc Backblaze B2.");
+  return serveBoth(candidates);
 }
 
 export async function startMultipart(env: Env, key: string, contentType: string) {

@@ -91,6 +91,47 @@ describe("Workers KV object storage", () => {
     expect([...kv.entries.keys()]).toEqual(["__anp/parts/legacy/legacy-kv-upload/000001"]);
   });
 
+  it("writes to KV by preference and serves from both KV and B2 when configured", async () => {
+    const kv = new MemoryKv();
+    const env = {
+      ...storage(kv),
+      B2_BUCKET: "anp-media",
+      B2_ENDPOINT: "https://s3.us-east-005.backblazeb2.com",
+      B2_KEY_ID: "application-key-id",
+      B2_APP_KEY: "application-key-secret",
+    };
+    await putObject(env, "photo", "hello", "text/plain");
+    // KV là nguồn ghi ưu tiên.
+    expect([...kv.entries.keys()]).toContain("photo");
+
+    const response = await serveObject(env, "photo", new Request("https://anp.test/photo"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("text/plain");
+    expect(await response.text()).toBe("hello");
+  });
+
+  it("deletes from both KV and B2 when configured", async () => {
+    const kv = new MemoryKv();
+    const env = {
+      ...storage(kv),
+      B2_BUCKET: "anp-media",
+      B2_ENDPOINT: "https://s3.us-east-005.backblazeb2.com",
+      B2_KEY_ID: "application-key-id",
+      B2_APP_KEY: "application-key-secret",
+    };
+    await putObject(env, "photo", "hello", "text/plain");
+    expect([...kv.entries.keys()]).toContain("photo");
+    await deleteKeys(env, ["photo"]);
+    expect(kv.entries.size).toBe(0);
+  });
+
+  it("throws not found when neither KV nor B2 can serve the object", async () => {
+    const kv = new MemoryKv();
+    await expect(
+      serveObject(storage(kv), "missing", new Request("https://anp.test/missing")),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
   it("removes manifests, parts, and aborted uploads", async () => {
     const kv = new MemoryKv();
     const upload = await startMultipart(storage(kv), "media", "image/jpeg");
