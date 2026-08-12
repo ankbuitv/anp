@@ -44,6 +44,8 @@ Trước lần đầu:
 3. Gắn domain `p.ankb.qzz.io`.
 4. Push `main` hoặc chạy workflow deploy.
 
+Nếu chỉ deploy Worker (Git integration) mà quên migration, API tự bổ sung cột/bảng còn thiếu ở request đầu tiên. Health: `GET /api/v1/health` trả `db: "ok" | "error" | "missing"`.
+
 Không cần R2 bucket, S3 credentials hay thẻ thanh toán R2.
 
 ## Kiểm tra

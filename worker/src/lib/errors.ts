@@ -21,3 +21,20 @@ export const Errors = {
   payload: (m = "File quá lớn.") => new ApiError(413, "payload_too_large", m),
   server: (m = "Đã xảy ra lỗi. Thử lại sau.") => new ApiError(500, "server_error", m),
 };
+
+export function zodErrorMessage(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const e = err as { name?: string; issues?: { message?: string }[] };
+  if (e.name !== "ZodError" && !Array.isArray(e.issues)) return null;
+  return e.issues?.[0]?.message || "Dữ liệu không hợp lệ.";
+}
+
+export function publicUnhandledMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  const col = msg.match(/no such column:\s*(\w+)/i);
+  if (col) return `Cơ sở dữ liệu thiếu cột ${col[1]}. Hệ thống đang tự bổ sung — thử lại.`;
+  const table = msg.match(/no such table:\s*(\w+)/i);
+  if (table) return `Cơ sở dữ liệu thiếu bảng ${table[1]}. Hệ thống đang tự bổ sung — thử lại.`;
+  if (/D1_|SQLITE_/i.test(msg)) return "Không ghi được dữ liệu. Thử lại sau vài giây.";
+  return "Đã xảy ra lỗi. Thử lại sau.";
+}
