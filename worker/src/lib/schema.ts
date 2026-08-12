@@ -67,6 +67,21 @@ async function addColumn(db: D1Database, table: string, name: string, ddl: strin
 }
 
 async function applyPendingMigrations(db: D1Database) {
+  await db.prepare(`CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    avatar_key TEXT,
+    vault_pin_hash TEXT,
+    vault_pin_salt TEXT,
+    email_verified INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`).run();
+  await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email)`).run();
+
   const addedEmail = await addColumn(db, "users", "email_verified", "email_verified INTEGER NOT NULL DEFAULT 0");
   if (addedEmail) {
     await db.prepare(`UPDATE users SET email_verified = 1 WHERE email_verified = 0`).run();
