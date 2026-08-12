@@ -42,6 +42,14 @@ export function verificationEmail(name: string, url: string): EmailMessage {
   return { to: "", subject: "Xác nhận email ANP", text, html };
 }
 
+export function hasEmailProvider(env: Env): boolean {
+  if (env.EMAIL_PROVIDER === "none") return false;
+  if (env.EMAIL_PROVIDER === "log") return true;
+  if (env.RESEND_API_KEY || env.BREVO_API_KEY) return true;
+  if (env.MAILGUN_API_KEY && env.MAILGUN_DOMAIN) return true;
+  return false;
+}
+
 export async function sendEmail(env: Env, message: EmailMessage): Promise<void> {
   if (env.EMAIL_PROVIDER === "log" || env.ENVIRONMENT === "development") {
     console.log("[email]", JSON.stringify({ to: message.to, subject: message.subject, text: message.text }));
@@ -50,7 +58,7 @@ export async function sendEmail(env: Env, message: EmailMessage): Promise<void> 
   if (env.RESEND_API_KEY) return sendResend(env, message);
   if (env.BREVO_API_KEY) return sendBrevo(env, message);
   if (env.MAILGUN_API_KEY && env.MAILGUN_DOMAIN) return sendMailgun(env, message);
-  throw new Error("Email provider chưa được cấu hình (RESEND_API_KEY hoặc MAILGUN_API_KEY/MAILGUN_DOMAIN).");
+  console.warn("[email:no-provider]", JSON.stringify({ to: message.to, subject: message.subject, text: message.text }));
 }
 
 async function sendResend(env: Env, message: EmailMessage) {

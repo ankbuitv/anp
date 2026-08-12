@@ -277,7 +277,11 @@ uploadRoutes.post("/:id/complete", async (c) => {
     .run();
 
   await audit(c, "upload", { entityType: "media", entityId: mediaId, meta: { filename: row.filename, size: row.size } });
-  c.executionCtx.waitUntil(rebuildMoments(c.env.DB, user.id));
+  if (c.executionCtx && typeof c.executionCtx.waitUntil === "function") {
+    c.executionCtx.waitUntil(rebuildMoments(c.env.DB, user.id));
+  } else {
+    void rebuildMoments(c.env.DB, user.id);
+  }
 
   const media = await getMedia(c.env.DB, mediaId, user.id);
   return ok(c, { media: media ? publicMedia(media) : null });

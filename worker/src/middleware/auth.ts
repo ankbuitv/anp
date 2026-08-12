@@ -59,14 +59,16 @@ export const loadSession = createMiddleware<AppContext>(async (c, next) => {
       c.set("sessionId", row.sid);
       c.set("deviceId", row.device_id);
       const now = Date.now();
-      c.executionCtx.waitUntil(
-        Promise.all([
-          c.env.DB.prepare(`UPDATE sessions SET last_active_at = ? WHERE id = ?`).bind(now, row.sid).run(),
-          row.device_id
-            ? c.env.DB.prepare(`UPDATE devices SET last_active_at = ? WHERE id = ?`).bind(now, row.device_id).run()
-            : Promise.resolve(),
-        ]),
-      );
+      if (c.executionCtx && typeof c.executionCtx.waitUntil === "function") {
+        c.executionCtx.waitUntil(
+          Promise.all([
+            c.env.DB.prepare(`UPDATE sessions SET last_active_at = ? WHERE id = ?`).bind(now, row.sid).run(),
+            row.device_id
+              ? c.env.DB.prepare(`UPDATE devices SET last_active_at = ? WHERE id = ?`).bind(now, row.device_id).run()
+              : Promise.resolve(),
+          ]),
+        );
+      }
 
       const vaultRaw = getCookie(c, VAULT_COOKIE);
       if (vaultRaw) {

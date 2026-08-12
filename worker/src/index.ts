@@ -33,6 +33,9 @@ app.onError((err, c) => {
   if (err instanceof ApiError) {
     return c.json({ ok: false, error: { code: err.code, message: err.message } }, err.status as 400);
   }
+  if (err instanceof SyntaxError) {
+    return c.json({ ok: false, error: { code: "bad_request", message: "Dữ liệu JSON không hợp lệ." } }, 400);
+  }
   console.error("unhandled", err);
   return c.json({ ok: false, error: { code: "server_error", message: "Đã xảy ra lỗi. Thử lại sau." } }, 500);
 });
