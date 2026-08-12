@@ -22,10 +22,16 @@ export function VerifyEmailPending() {
     setErr("");
     setMsg("");
     try {
-      await api<{ queued: boolean }>("/auth/verify-email/resend", { method: "POST", body: "{}" });
-      setMsg("Đã gửi lại email xác nhận. Kiểm tra hộp thư (và mục spam).");
+      const res = await api<{ queued: boolean; verified?: boolean }>("/auth/verify-email/resend", { method: "POST", body: "{}" });
+      if (res.verified) {
+        setMsg("Tài khoản đã được xác nhận. Đang vào thư viện…");
+        await useAuth.getState().load();
+        setTimeout(() => nav("/", { replace: true }), 600);
+      } else {
+        setMsg("Đã gửi lại email xác nhận. Kiểm tra hộp thư (và mục spam).");
+      }
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Không gửi được email.");
+      setErr(e instanceof ApiError ? e.message : "Không gửi được email. Vui lòng thử lại.");
     } finally {
       setBusy(false);
     }

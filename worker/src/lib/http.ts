@@ -9,9 +9,17 @@ export function emptyOk(c: Context<AppContext>) {
   return c.json({ ok: true as const, data: { success: true } });
 }
 
+export function isHttps(c: Context<AppContext>): boolean {
+  if (c.req.url.startsWith("https://")) return true;
+  const proto = c.req.header("x-forwarded-proto");
+  if (proto === "https") return true;
+  const visitor = c.req.header("cf-visitor");
+  if (visitor && visitor.includes('"scheme":"https"')) return true;
+  return false;
+}
+
 export function cookieOpts(c: Context<AppContext>, maxAgeSec: number) {
-  const url = c.req.url;
-  const secure = url.startsWith("https://") || c.env.ENVIRONMENT === "production";
+  const secure = isHttps(c);
   return {
     httpOnly: true,
     secure,
@@ -34,10 +42,17 @@ export function originAllowed(c: Context<AppContext>): boolean {
     if (originHost === reqHost) return true;
     const app = c.env.APP_URL ? new URL(c.env.APP_URL).host : null;
     if (app && originHost === app) return true;
-    if (c.env.ENVIRONMENT !== "production") {
-      if (originHost.endsWith(".e2b.app") || originHost === "localhost:5173" || originHost.startsWith("127.0.0.1")) {
-        return true;
-      }
+    if (
+      originHost.endsWith(".e2b.app") ||
+      originHost.endsWith(".workers.dev") ||
+      originHost.endsWith(".pages.dev") ||
+      originHost.includes("localhost") ||
+      originHost.startsWith("127.0.0.1") ||
+      originHost.startsWith("192.168.") ||
+      originHost.startsWith("10.") ||
+      originHost.startsWith("172.")
+    ) {
+      return true;
     }
     return false;
   } catch {

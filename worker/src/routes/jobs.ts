@@ -52,7 +52,11 @@ jobRoutes.post("/export", async (c) => {
     .bind(id, user.id, body.scope === "all" ? "export_all" : "export_album", JSON.stringify(body), now)
     .run();
 
-  c.executionCtx.waitUntil(runExport(c.env, user.id, id, body.albumId, body.scope === "all"));
+  if (c.executionCtx && typeof c.executionCtx.waitUntil === "function") {
+    c.executionCtx.waitUntil(runExport(c.env, user.id, id, body.albumId, body.scope === "all"));
+  } else {
+    void runExport(c.env, user.id, id, body.albumId, body.scope === "all");
+  }
   await audit(c, "export", { entityType: "job", entityId: id });
   return ok(c, { id, status: "queued" }, 201);
 });

@@ -23,7 +23,7 @@ import { cookieOpts, clientIp } from "../lib/http";
 import { hashSecret, verifySecret, sha256Hex, randomHex, newId } from "../lib/crypto";
 import { audit } from "../lib/audit";
 import { notify } from "../lib/notify";
-import { sendEmail, verificationEmail } from "../lib/email";
+import { sendEmail, verificationEmail, hasEmailProvider } from "../lib/email";
 import { appBase } from "../lib/http";
 import { SESSION_COOKIE, VAULT_COOKIE } from "../middleware/auth";
 import { requireAuth } from "../middleware/auth";
@@ -112,22 +112,29 @@ authRoutes.post("/register", rateLimit(8, 10 * 60_000, "reg"), async (c) => {
   const { hash, salt } = await hashSecret(body.password);
   const id = newId();
   const now = Date.now();
+  const emailVerified = !hasEmailProvider(c.env);
   await c.env.DB.prepare(
-    `INSERT INTO users (id, name, email, password_hash, password_salt, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users (id, name, email, password_hash, password_salt, email_verified, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, body.name, body.email.toLowerCase(), hash, salt, now, now)
+    .bind(id, body.name, body.email.toLowerCase(), hash, salt, emailVerified ? 1 : 0, now, now)
     .run();
-  await c.env.DB.prepare(`INSERT INTO user_settings (user_id, theme, slideshow_seconds) VALUES (?, 'dark', 5)`)
+  await c.env.DB.prepare(
+    `INSERT INTO user_settings (user_id, theme, slideshow_seconds) VALUES (?, 'dark', 5)
+     ON CONFLICT(user_id) DO NOTHING`,
+  )
     .bind(id)
     .run();
   await createSession(c, id, { name: "Trình duyệt", type: "web", platform: c.req.header("user-agent") || "" });
-  let emailQueued = true;
-  try {
-    await createEmailVerification(c, id, body.email.toLowerCase());
-  } catch (err) {
-    emailQueued = false;
-    console.error("verification email failed", err);
+  let emailQueued = false;
+  if (!emailVerified) {
+    try {
+      await createEmailVerification(c, id, body.email.toLowerCase());
+      emailQueued = true;
+    } catch (err) {
+      emailQueued = false;
+      console.error("verification email failed", err);
+    }
   }
   await audit(c, "register", { userId: id, entityType: "user", entityId: id });
   await notify(
@@ -135,7 +142,9 @@ authRoutes.post("/register", rateLimit(8, 10 * 60_000, "reg"), async (c) => {
     id,
     "welcome",
     "Chào mừng đến ANP",
-    emailQueued
+    emailVerified
+      ? "Chào mừng bạn đến với ANP! Bắt đầu tải lên ảnh hoặc video đầu tiên."
+      : emailQueued
       ? "Kiểm tra email để xác nhận tài khoản, sau đó tải ảnh hoặc video đầu tiên."
       : "Tài khoản đã tạo. Hệ thống chưa gửi được email xác nhận, bạn có thể thử gửi lại.",
   );
@@ -148,7 +157,7 @@ authRoutes.post("/register", rateLimit(8, 10 * 60_000, "reg"), async (c) => {
         email: body.email.toLowerCase(),
         created_at: now,
         hasVaultPin: false,
-        emailVerified: false,
+        emailVerified,
       }),
       emailQueued,
     },
@@ -188,6 +197,14 @@ authRoutes.post("/login", rateLimit(20, 10 * 60_000, "login"), async (c) => {
     .run();
 
   if (!user || !valid) throw Errors.unauthorized("Email hoặc mật khẩu không đúng.");
+
+  // Tự động xác minh nếu hệ thống không cấu hình gửi email
+  if (!user.email_verified && !hasEmailProvider(c.env)) {
+    await c.env.DB.prepare(`UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?`)
+      .bind(Date.now(), user.id)
+      .run();
+    user.email_verified = 1;
+  }
 
   await createSession(c, user.id, {
     name: body.deviceName || "Trình duyệt",
@@ -240,13 +257,19 @@ authRoutes.post("/verify-email", rateLimit(10, 10 * 60_000, "verify"), async (c)
 
 authRoutes.post("/verify-email/resend", requireAuth, rateLimit(5, 10 * 60_000, "resend"), async (c) => {
   const u = c.get("user")!;
-  if (u.emailVerified) return ok(c, { queued: true });
+  if (u.emailVerified) return ok(c, { queued: true, verified: true });
+  if (!hasEmailProvider(c.env)) {
+    await c.env.DB.prepare(`UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?`)
+      .bind(Date.now(), u.id)
+      .run();
+    return ok(c, { queued: false, verified: true });
+  }
   try {
     await createEmailVerification(c, u.id, u.email);
-    return ok(c, { queued: true });
+    return ok(c, { queued: true, verified: false });
   } catch (err) {
     console.error("resend verification failed", err);
-    throw Errors.server("Không gửi được email xác nhận. Thử lại sau.");
+    throw Errors.server("Không gửi được email xác nhận. Vui lòng thử lại sau.");
   }
 });
 

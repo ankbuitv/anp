@@ -10,7 +10,7 @@ export type Env = {
   MAILGUN_API_KEY?: string;
   MAILGUN_DOMAIN?: string;
   BREVO_API_KEY?: string;
-  EMAIL_PROVIDER?: "resend" | "mailgun" | "brevo" | "log";
+  EMAIL_PROVIDER?: "resend" | "mailgun" | "brevo" | "log" | "none";
 };
 
 export type AuthedUser = {
