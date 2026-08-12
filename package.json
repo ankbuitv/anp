@@ -1,0 +1,39 @@
+{
+  "name": "anp",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "ANP — hệ thống lưu trữ ảnh & video cá nhân",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "worker"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n web,api -c cyan,magenta \"npm run dev -w @anp/web\" \"npm run dev -w @anp/worker\"",
+    "dev:web": "npm run dev -w @anp/web",
+    "dev:api": "npm run dev -w @anp/worker",
+    "build": "npm run build -w @anp/web",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck -w @anp/web && npm run typecheck -w @anp/worker && npm run typecheck -w @anp/api-types && npm run typecheck -w @anp/shared && npm run typecheck -w @anp/validation",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate:local": "wrangler d1 migrations apply anp --local",
+    "preview": "npm run build && wrangler dev --port 8787",
+    "cf:types": "wrangler types"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/node": "^22.10.5",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.18.0",
+    "globals": "^15.14.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^3.0.2",
+    "wrangler": "^4.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
