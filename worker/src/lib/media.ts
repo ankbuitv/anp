@@ -61,6 +61,8 @@ export function publicMedia(row: MediaRow, albums: { id: string; name: string }[
     thumbUrl: `${prefix}/media/${row.id}/thumb`,
     previewUrl: `${prefix}/media/${row.id}/preview`,
     fileUrl: `${prefix}/media/${row.id}/file`,
+    hasThumb: !!row.thumb_key,
+    hasPreview: !!row.preview_key,
     albums,
     ...exifFromRow(row),
   };

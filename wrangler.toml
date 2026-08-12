@@ -27,14 +27,24 @@ id = "6fe12765c4714494ae4a0827393a0c78"
 [vars]
 APP_URL = "https://p.ankb.qzz.io"
 ENVIRONMENT = "production"
+B2_BUCKET = "anp-media"
+B2_ENDPOINT = "https://s3.us-east-005.backblazeb2.com"
+B2_REGION = "us-east-005"
 
-# Secrets (wrangler secret put) — KHÔNG ghi vào file này:
+# MEDIA KV được giữ tạm làm fallback/local và làm nguồn trong lúc migrate.
+# Khi cả B2_KEY_ID và B2_APP_KEY tồn tại, Worker tự chuyển MEDIA sang B2.
+#
+# Secrets (npx wrangler secret put ...) — KHÔNG ghi vào file này:
+# B2_KEY_ID       (Application Key con giới hạn bucket; KHÔNG dùng master key)
+# B2_APP_KEY      (secret của Application Key con)
 # TURNSTILE_SECRET
 # MAIL_FROM="ANP <no-reply@ankb.qzz.io>"
 # BREVO_API_KEY (hoặc RESEND_API_KEY, hoặc MAILGUN_API_KEY + MAILGUN_DOMAIN)
 #
 # Ví dụ:
-# wrangler secret put MAIL_FROM
-# wrangler secret put RESEND_API_KEY
+# npx wrangler secret put B2_KEY_ID
+# npx wrangler secret put B2_APP_KEY
+# npx wrangler secret put MAIL_FROM
+# npx wrangler secret put RESEND_API_KEY
 
 # Custom domain p.ankb.qzz.io được gắn trên Cloudflare dashboard.

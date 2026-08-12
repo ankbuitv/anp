@@ -11,6 +11,7 @@
     "@anp/api-types": "0.1.0",
     "@anp/shared": "0.1.0",
     "@anp/validation": "0.1.0",
+    "@aws-sdk/client-s3": "^3.1108.0",
     "hono": "^4.7.4",
     "zod": "^3.24.1"
   },

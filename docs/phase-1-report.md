@@ -1,5 +1,7 @@
 # Báo cáo Phase 1 — ANP Web + API
 
+> Báo cáo lịch sử tại thời điểm Phase 1 dùng Workers KV. Media production hiện dùng Backblaze B2; xem `docs/architecture.md`.
+
 Ngày: 2026-08-12  
 Nhánh: `arena/019ff37a-anp`
 

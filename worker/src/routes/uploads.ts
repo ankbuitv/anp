@@ -70,7 +70,7 @@ uploadRoutes.post("/", rateLimit(120, 60_000, "up-init"), async (c) => {
   const mediaId = newId();
   const ext = extOf(body.filename) || (type === "video" ? "mp4" : "jpg");
   const key = objectKey(user.id, mediaId, "original", ext);
-  const mp = await startMultipart(c.env.MEDIA, key, mime);
+  const mp = await startMultipart(c.env, key, mime);
   const now = Date.now();
   const meta = {
     isPrivate: !!body.isPrivate,
@@ -166,7 +166,7 @@ uploadRoutes.put("/:id/parts/:n", rateLimit(600, 60_000, "up-part"), async (c) =
   if (buf.byteLength === 0) throw Errors.badRequest("Phần trống.");
   if (buf.byteLength > CHUNK_SIZE) throw Errors.payload("Phần vượt kích thước cho phép.");
 
-  const mp = resumeMultipart(c.env.MEDIA, row.storage_key, row.multipart_upload_id);
+  const mp = resumeMultipart(c.env, row.storage_key, row.multipart_upload_id);
   const uploaded = await mp.uploadPart(n, buf);
   parts.push({ partNumber: n, etag: uploaded.etag, size: uploaded.size });
   parts.sort((a, b) => a.partNumber - b.partNumber);
@@ -210,7 +210,7 @@ uploadRoutes.post("/:id/complete", async (c) => {
     throw Errors.badRequest("Dữ liệu tải lên chưa đủ.");
   }
 
-  const mp = resumeMultipart(c.env.MEDIA, row.storage_key, row.multipart_upload_id, row.mime);
+  const mp = resumeMultipart(c.env, row.storage_key, row.multipart_upload_id, row.mime);
   try {
     await mp.complete(parts);
   } catch {
@@ -303,7 +303,7 @@ uploadRoutes.put("/:id/thumb", async (c) => {
   const key = objectKey(user.id, id, kind, ext);
   const buf = await c.req.arrayBuffer();
   if (buf.byteLength === 0 || buf.byteLength > 8 * 1024 * 1024) throw Errors.payload();
-  await putObject(c.env.MEDIA, key, buf, "image/jpeg");
+  await putObject(c.env, key, buf, "image/jpeg");
   if (kind === "preview") {
     await c.env.DB.prepare(`UPDATE media SET preview_key = ?, preview_size = ? WHERE id = ? AND user_id = ?`)
       .bind(key, buf.byteLength, id, user.id)
@@ -323,7 +323,7 @@ uploadRoutes.delete("/:id", async (c) => {
   if (!row) throw Errors.notFound();
   if (row.multipart_upload_id && row.status !== "completed") {
     try {
-      await resumeMultipart(c.env.MEDIA, row.storage_key, row.multipart_upload_id).abort();
+      await resumeMultipart(c.env, row.storage_key, row.multipart_upload_id).abort();
     } catch {}
   }
   await c.env.DB.prepare(`UPDATE upload_sessions SET status = 'cancelled' WHERE id = ?`).bind(row.id).run();

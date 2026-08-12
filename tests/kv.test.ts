@@ -43,16 +43,16 @@ class MemoryKv {
   }
 }
 
-function namespace(kv: MemoryKv) {
-  return kv as unknown as KVNamespace;
+function storage(kv: MemoryKv) {
+  return { MEDIA: kv as unknown as KVNamespace } as import("../worker/src/env").Env;
 }
 
 describe("Workers KV object storage", () => {
   it("stores and serves a single-value object", async () => {
     const kv = new MemoryKv();
-    await putObject(namespace(kv), "photo", "hello", "text/plain");
+    await putObject(storage(kv), "photo", "hello", "text/plain");
 
-    const response = await serveObject(namespace(kv), "photo", new Request("https://anp.test/photo"));
+    const response = await serveObject(storage(kv), "photo", new Request("https://anp.test/photo"));
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("text/plain");
     expect(response.headers.get("Content-Length")).toBe("5");
@@ -61,13 +61,13 @@ describe("Workers KV object storage", () => {
 
   it("serves a byte range across multipart values", async () => {
     const kv = new MemoryKv();
-    const upload = startMultipart(namespace(kv), "video", "video/mp4");
+    const upload = await startMultipart(storage(kv), "video", "video/mp4");
     const first = await upload.uploadPart(1, new TextEncoder().encode("hello"));
     const second = await upload.uploadPart(2, new TextEncoder().encode("world"));
     await upload.complete([first, second]);
 
     const response = await serveObject(
-      namespace(kv),
+      storage(kv),
       "video",
       new Request("https://anp.test/video", { headers: { Range: "bytes=3-7" } }),
     );
@@ -77,18 +77,33 @@ describe("Workers KV object storage", () => {
     expect(await response.text()).toBe("lowor");
   });
 
+  it("keeps legacy multipart sessions on KV after B2 is configured", async () => {
+    const kv = new MemoryKv();
+    const env = {
+      ...storage(kv),
+      B2_BUCKET: "anp-media",
+      B2_ENDPOINT: "https://s3.us-east-005.backblazeb2.com",
+      B2_KEY_ID: "application-key-id",
+      B2_APP_KEY: "application-key-secret",
+    };
+    const upload = resumeMultipart(env, "legacy", "legacy-kv-upload", "image/jpeg");
+    await upload.uploadPart(1, new Uint8Array([1, 2, 3]));
+    expect([...kv.entries.keys()]).toEqual(["__anp/parts/legacy/legacy-kv-upload/000001"]);
+  });
+
   it("removes manifests, parts, and aborted uploads", async () => {
     const kv = new MemoryKv();
-    const upload = startMultipart(namespace(kv), "media", "image/jpeg");
+    const upload = await startMultipart(storage(kv), "media", "image/jpeg");
+    expect(upload.uploadId).toMatch(/^kv:/);
     await upload.uploadPart(1, new Uint8Array([1, 2, 3]));
     await upload.abort();
     expect(kv.entries.size).toBe(0);
 
-    const resumed = resumeMultipart(namespace(kv), "media", "upload-id", "image/jpeg");
+    const resumed = resumeMultipart(storage(kv), "media", "upload-id", "image/jpeg");
     const part = await resumed.uploadPart(1, new Uint8Array([1, 2, 3]));
     await resumed.complete([part]);
     expect(kv.entries.size).toBe(2);
-    await deleteKeys(namespace(kv), ["media"]);
+    await deleteKeys(storage(kv), ["media"]);
     expect(kv.entries.size).toBe(0);
   });
 });
