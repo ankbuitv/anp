@@ -15,6 +15,14 @@ npm run dev
 - Web: Vite `:5173` (proxy `/api` → Worker)
 - API: Wrangler `:8787` (D1 + R2 local)
 
+Workflows mẫu nằm ở `docs/github-workflows/` (token Arena không có quyền ghi `.github/workflows`).
+Sau khi merge, copy vào `.github/workflows/`:
+
+```bash
+mkdir -p .github/workflows
+cp docs/github-workflows/*.yml .github/workflows/
+```
+
 ## Production
 
 Secrets GitHub:
