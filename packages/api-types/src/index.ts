@@ -73,6 +73,8 @@ export type Media = {
   thumbUrl: string;
   previewUrl: string;
   fileUrl: string;
+  hasThumb: boolean;
+  hasPreview: boolean;
   albums: { id: string; name: string }[];
 } & ExifInfo;
 

@@ -1,4 +1,6 @@
-import { Errors } from "./errors";
+import type { Env } from "../env";
+import { getB2Storage, isB2Configured } from "./b2";
+import { ApiError, Errors } from "./errors";
 
 const STORAGE_VERSION = 1;
 const PART_PREFIX = "__anp/parts";
@@ -36,7 +38,7 @@ type Manifest = {
 
 export type MpPart = { partNumber: number; etag: string; size: number };
 
-type Body = ReadableStream | ArrayBuffer | Uint8Array | Blob | string;
+export type StorageBody = ReadableStream | ArrayBuffer | ArrayBufferView | Uint8Array | Blob | string;
 
 function objectPrefix(key: string) {
   return `${PART_PREFIX}/${encodeURIComponent(key)}/`;
@@ -50,7 +52,7 @@ function partKey(key: string, uploadId: string, partNumber: number) {
   return `${uploadPrefix(key, uploadId)}${String(partNumber).padStart(6, "0")}`;
 }
 
-async function bodyToArrayBuffer(body: Body): Promise<ArrayBuffer> {
+async function bodyToArrayBuffer(body: StorageBody): Promise<ArrayBuffer> {
   if (typeof body === "string") return new TextEncoder().encode(body).buffer as ArrayBuffer;
   if (body instanceof ArrayBuffer) return body;
   if (ArrayBuffer.isView(body)) {
@@ -92,7 +94,7 @@ async function writeManifest(namespace: KVNamespace, key: string, manifest: Mani
  * Store a complete object in Workers KV. Values larger than one application
  * chunk are split into independent KV values and represented by a manifest.
  */
-export async function putObject(namespace: KVNamespace, key: string, body: Body, contentType: string) {
+async function putKvObject(namespace: KVNamespace, key: string, body: StorageBody, contentType: string) {
   const data = await bodyToArrayBuffer(body);
   const etag = crypto.randomUUID();
 
@@ -134,7 +136,7 @@ export async function putObject(namespace: KVNamespace, key: string, body: Body,
   await deletePrefix(namespace, objectPrefix(key), currentPrefix);
 }
 
-export async function deleteKeys(namespace: KVNamespace, keys: (string | null | undefined)[]) {
+async function deleteKvKeys(namespace: KVNamespace, keys: (string | null | undefined)[]) {
   for (const key of keys.filter((value): value is string => !!value)) {
     await namespace.delete(key);
     await deletePrefix(namespace, objectPrefix(key));
@@ -225,7 +227,7 @@ async function readObject(namespace: KVNamespace, key: string) {
   return { metadata: fallbackMetadata, manifest: null, value: stored.value };
 }
 
-export async function serveObject(
+async function serveKvObject(
   namespace: KVNamespace,
   key: string,
   request: Request,
@@ -311,10 +313,51 @@ class KvMultipartUpload {
 // Keep application chunks comfortably below Workers KV's per-value limit.
 export const KV_PART_SIZE = 8 * 1024 * 1024;
 
-export function startMultipart(namespace: KVNamespace, key: string, contentType: string) {
-  return new KvMultipartUpload(namespace, key, crypto.randomUUID(), contentType);
+function kvNamespace(env: Env): KVNamespace {
+  if (!env.MEDIA) throw Errors.server("Chưa cấu hình storage MEDIA hoặc Backblaze B2.");
+  return env.MEDIA;
 }
 
-export function resumeMultipart(namespace: KVNamespace, key: string, uploadId: string, contentType = "application/octet-stream") {
-  return new KvMultipartUpload(namespace, key, uploadId, contentType);
+export async function putObject(env: Env, key: string, body: StorageBody, contentType: string) {
+  if (isB2Configured(env)) return getB2Storage(env).putObject(key, body, contentType);
+  return putKvObject(kvNamespace(env), key, body, contentType);
+}
+
+export async function deleteKeys(env: Env, keys: (string | null | undefined)[]) {
+  if (isB2Configured(env)) return getB2Storage(env).deleteKeys(keys);
+  return deleteKvKeys(kvNamespace(env), keys);
+}
+
+export async function serveObject(
+  env: Env,
+  key: string,
+  request: Request,
+  fallbackType = "application/octet-stream",
+  filename?: string,
+): Promise<Response> {
+  if (isB2Configured(env)) {
+    try {
+      return await getB2Storage(env).serveObject(key, request, fallbackType, filename);
+    } catch (error) {
+      // Read-only fallback covers a rollout race or an upload session opened on
+      // KV before B2 was enabled. New writes still always go to B2.
+      if (!(error instanceof ApiError) || error.status !== 404 || !env.MEDIA) throw error;
+    }
+  }
+  return serveKvObject(kvNamespace(env), key, request, fallbackType, filename);
+}
+
+export async function startMultipart(env: Env, key: string, contentType: string) {
+  if (isB2Configured(env)) return getB2Storage(env).startMultipart(key, contentType);
+  return new KvMultipartUpload(kvNamespace(env), key, `kv:${crypto.randomUUID()}`, contentType);
+}
+
+export function resumeMultipart(env: Env, key: string, uploadId: string, contentType = "application/octet-stream") {
+  if (uploadId.startsWith("b2:")) {
+    if (!isB2Configured(env)) throw Errors.server("Phiên tải lên B2 không thể tiếp tục vì thiếu cấu hình B2.");
+    return getB2Storage(env).resumeMultipart(key, uploadId);
+  }
+  // IDs without a prefix are legacy KV sessions. Keeping them on KV avoids
+  // sending an in-flight pre-rollout upload ID to B2 after credentials turn on.
+  return new KvMultipartUpload(kvNamespace(env), key, uploadId, contentType);
 }

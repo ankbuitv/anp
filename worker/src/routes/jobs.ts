@@ -66,7 +66,7 @@ jobRoutes.get("/:id/file", async (c) => {
     .bind(c.req.param("id"), c.get("user")!.id)
     .first<{ storage_key: string | null; status: string }>();
   if (!job?.storage_key || job.status !== "completed") throw Errors.notFound("File xuất chưa sẵn sàng.");
-  return serveObject(c.env.MEDIA, job.storage_key, c.req.raw, "application/zip", `ANP_Album_${new Date().toISOString().slice(0, 10)}.zip`);
+  return serveObject(c.env, job.storage_key, c.req.raw, "application/zip", `ANP_Album_${new Date().toISOString().slice(0, 10)}.zip`);
 });
 
 async function runExport(env: AppContext["Bindings"], userId: string, jobId: string, albumId?: string, all?: boolean) {
@@ -119,7 +119,7 @@ hoặc tải từng file từ thư viện web.
 File metadata.json mô tả toàn bộ media đã xuất.
 `;
     const payload = JSON.stringify({ readme, metadata }, null, 2);
-    await putObject(env.MEDIA, key, payload, "application/json");
+    await putObject(env, key, payload, "application/json");
     await env.DB.prepare(
       `UPDATE jobs SET status = 'completed', progress = 100, r2_key = ?, storage_key = ?, result_json = ?, completed_at = ? WHERE id = ?`,
     )

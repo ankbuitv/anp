@@ -344,10 +344,10 @@ async function fileHandler(c: Context<AppContext>, kind: "file" | "thumb" | "pre
 
   const download = c.req.query("dl") === "1";
   if (kind === "file") {
-    return serveObject(c.env.MEDIA, row.storage_key, c.req.raw, row.mime, download ? row.original_name : undefined);
+    return serveObject(c.env, row.storage_key, c.req.raw, row.mime, download ? row.original_name : undefined);
   }
   const key = kind === "preview" ? row.preview_key || row.thumb_key || row.storage_key : row.thumb_key || row.preview_key || row.storage_key;
-  return serveObject(c.env.MEDIA, key, c.req.raw, "image/jpeg");
+  return serveObject(c.env, key, c.req.raw, "image/jpeg");
 }
 
 mediaRoutes.get("/:id/file", async (c) => fileHandler(c, "file"));

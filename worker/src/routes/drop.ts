@@ -93,7 +93,7 @@ dropRoutes.post("/:id/files", rateLimit(60, 60_000, "drop-up"), async (c) => {
   }
   const fid = newId();
   const key = dropKey(row.id, fid, extOf(filename));
-  await putObject(c.env.MEDIA, key, buf, mime);
+  await putObject(c.env, key, buf, mime);
   await c.env.DB.prepare(
     `INSERT INTO drop_files (id, session_id, filename, size, mime, r2_key, storage_key, status, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'ready', ?)`,
@@ -116,5 +116,5 @@ dropRoutes.get("/:id/files/:fid", async (c) => {
     .first<{ storage_key: string; filename: string; mime: string | null; expires_at: number }>();
   if (!file) throw Errors.notFound();
   if (file.expires_at < Date.now()) throw Errors.gone();
-  return serveObject(c.env.MEDIA, file.storage_key, c.req.raw, file.mime || "application/octet-stream", file.filename);
+  return serveObject(c.env, file.storage_key, c.req.raw, file.mime || "application/octet-stream", file.filename);
 });

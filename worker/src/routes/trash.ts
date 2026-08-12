@@ -39,7 +39,7 @@ trashRoutes.post("/purge", async (c) => {
     rows = res.results ?? [];
   }
   for (const r of rows) {
-    await deleteKeys(c.env.MEDIA, [r.storage_key, r.thumb_key, r.preview_key]);
+    await deleteKeys(c.env, [r.storage_key, r.thumb_key, r.preview_key]);
     await c.env.DB.prepare(`DELETE FROM media WHERE id = ?`).bind(r.id).run();
   }
   await audit(c, "purge", { entityType: "media", meta: { count: rows.length } });
