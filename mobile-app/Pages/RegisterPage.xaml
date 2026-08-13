@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="AnpMobile.Pages.RegisterPage"
+             Title="Tạo tài khoản">
+    <ScrollView>
+        <VerticalStackLayout Padding="24" Spacing="12">
+            <Label Text="Lưu ảnh &amp; video đầu tiên của bạn" FontSize="20" FontAttributes="Bold" />
+            <Label Text="Tài khoản miễn phí, media lưu trên Backblaze B2 của riêng bạn."
+                   Style="{StaticResource LabelMuted}" />
+
+            <Entry x:Name="NameEntry" Placeholder="Tên" ReturnType="Next" />
+            <Entry x:Name="EmailEntry" Placeholder="Email" Keyboard="Email" ReturnType="Next" />
+            <Entry x:Name="PasswordEntry" Placeholder="Mật khẩu" IsPassword="True" ReturnType="Next" />
+            <Entry x:Name="ConfirmEntry" Placeholder="Nhập lại mật khẩu" IsPassword="True" ReturnType="Done" />
+            <Label Text="Mật khẩu 8–128 ký tự, có ít nhất một chữ và một số." Style="{StaticResource LabelMuted}" />
+            <Label x:Name="ErrorLabel" Style="{StaticResource LabelError}" IsVisible="False" />
+            <Button x:Name="RegisterButton" Text="Tạo tài khoản" Style="{StaticResource ButtonPrimary}" Clicked="RegisterClicked" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

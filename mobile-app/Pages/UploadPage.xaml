@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:core="clr-namespace:AnpMobile.Core;assembly=AnpMobile.Core"
+             x:Class="AnpMobile.Pages.UploadPage"
+             Title="Tải lên">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*">
+
+        <Border Grid.Row="0" Style="{StaticResource Card}" Margin="12,10,12,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Upload ảnh &amp; video" FontAttributes="Bold" />
+                    <Label Text="Upload resume được; file trùng checksum sẽ bị bỏ qua."
+                           Style="{StaticResource LabelMuted}" FontSize="12" />
+                </VerticalStackLayout>
+                <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                    <Label Text="Riêng tư" Style="{StaticResource LabelMuted}" FontSize="12" HorizontalOptions="End" />
+                    <Switch IsToggled="{Binding IsPrivate}" HorizontalOptions="End" />
+                </VerticalStackLayout>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="8" Padding="12,8">
+            <Button Text="Chụp ảnh" Command="{Binding CaptureCommand}" FontSize="13" Padding="8" />
+            <Button Grid.Column="1" Text="Chọn ảnh" Command="{Binding PickPhotosCommand}" FontSize="13" Padding="8" />
+            <Button Grid.Column="2" Text="Chọn video" Command="{Binding PickVideoCommand}" FontSize="13" Padding="8" />
+        </Grid>
+
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8" Padding="12,0">
+            <Label Text="{Binding StatusText}" Style="{StaticResource LabelMuted}" VerticalOptions="Center" />
+            <Button Grid.Column="2" Text="{Binding PauseText}" Command="{Binding PauseResumeCommand}"
+                    Style="{StaticResource ButtonLink}" Padding="8,4" MinimumHeightRequest="0" />
+            <Button Grid.Column="3" Text="Dọn xong" Command="{Binding ClearCommand}"
+                    Style="{StaticResource ButtonLink}" Padding="8,4" MinimumHeightRequest="0" />
+        </Grid>
+
+        <CollectionView Grid.Row="3" ItemsSource="{Binding Items}" SelectionMode="None" Margin="12,6">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="core:UploadItem">
+                    <Border Style="{StaticResource Card}" Margin="0,4" Padding="12,10">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="{Binding Name}" FontSize="14" LineBreakMode="TailTruncation" />
+                                <ProgressBar Progress="{Binding Progress}" />
+                                <Label Text="{Binding StatusText}" Style="{StaticResource LabelMuted}" FontSize="12" />
+                                <Label Text="{Binding Error}" Style="{StaticResource LabelError}" FontSize="12" IsVisible="{Binding HasError}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="6">
+                                <Label Text="{Binding SizeText}" Style="{StaticResource LabelMuted}" FontSize="11" HorizontalOptions="End" />
+                                <Button Text="Hủy" IsVisible="{Binding CanCancel}" FontSize="12" Padding="10,4"
+                                        MinimumHeightRequest="0" Clicked="CancelClicked" />
+                                <Button Text="Thử lại" IsVisible="{Binding CanRetry}" FontSize="12" Padding="10,4"
+                                        MinimumHeightRequest="0" Clicked="RetryClicked" />
+                            </VerticalStackLayout>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <VerticalStackLayout Grid.Row="3" IsVisible="{Binding IsEmpty}" Padding="32"
+                             VerticalOptions="Center" Spacing="10">
+            <Label Text="Chưa có gì đang tải" FontSize="18" HorizontalOptions="Center"
+                   TextColor="{AppThemeBinding Dark={StaticResource Mute}, Light={StaticResource MuteLight}}" />
+            <Label Text="Chụp hoặc chọn ảnh/video ở trên để bắt đầu." Style="{StaticResource LabelMuted}" HorizontalTextAlignment="Center" />
+            <Label Text="{Binding Message}" Style="{StaticResource LabelError}" HorizontalTextAlignment="Center"
+                   IsVisible="{Binding HasMessage}" />
+        </VerticalStackLayout>
+
+    </Grid>
+</ContentPage>

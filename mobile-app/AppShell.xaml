@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+       xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+       xmlns:pages="clr-namespace:AnpMobile.Pages"
+       x:Class="AnpMobile.AppShell"
+       Shell.FlyoutBehavior="Disabled"
+       Shell.TabBarBackgroundColor="{AppThemeBinding Dark=#101114, Light=#FFFDF8}"
+       Shell.TabBarTitleColor="{AppThemeBinding Dark=#D7A36A, Light=#9A6B32}"
+       Shell.TabBarUnselectedColor="{AppThemeBinding Dark=#9A9588, Light=#6F6A60}"
+       Shell.NavBarHasShadow="False">
+
+    <TabBar>
+        <ShellContent Title="Thư viện" Icon="icon_gallery.png" ContentTemplate="{DataTemplate pages:GalleryPage}" />
+        <ShellContent Title="Album" Icon="icon_albums.png" ContentTemplate="{DataTemplate pages:AlbumsPage}" />
+        <ShellContent Title="Tải lên" Icon="icon_upload.png" ContentTemplate="{DataTemplate pages:UploadPage}" />
+        <ShellContent Title="Vault" Icon="icon_vault.png" ContentTemplate="{DataTemplate pages:VaultPage}" />
+        <ShellContent Title="Cài đặt" Icon="icon_settings.png" ContentTemplate="{DataTemplate pages:SettingsPage}" />
+    </TabBar>
+
+</Shell>

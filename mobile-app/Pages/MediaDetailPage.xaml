@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="AnpMobile.Pages.MediaDetailPage"
+             Title="Thông tin">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="10">
+
+            <Grid ColumnDefinitions="96,*" ColumnSpacing="14">
+                <Image x:Name="ThumbImage" WidthRequest="96" HeightRequest="96" Aspect="AspectFill" />
+                <VerticalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
+                    <Label x:Name="NameLabel" FontSize="16" FontAttributes="Bold" LineBreakMode="TailTruncation" />
+                    <Label x:Name="SizeLabel" Style="{StaticResource LabelMuted}" />
+                    <Label x:Name="DateLabel" Style="{StaticResource LabelMuted}" />
+                </VerticalStackLayout>
+            </Grid>
+
+            <Border Style="{StaticResource Card}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Thông tin" FontAttributes="Bold" />
+                    <Label x:Name="InfoLabel" Style="{StaticResource LabelMuted}" LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Máy ảnh" FontAttributes="Bold" />
+                    <Label x:Name="CameraLabel" Style="{StaticResource LabelMuted}" LineBreakMode="WordWrap" />
+                    <Label x:Name="ExifLabel" Style="{StaticResource LabelMuted}" LineBreakMode="WordWrap" />
+                    <Label x:Name="LocationLabel" Style="{StaticResource LabelMuted}" LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Album" FontAttributes="Bold" />
+                    <Label x:Name="AlbumsLabel" Style="{StaticResource LabelMuted}" LineBreakMode="WordWrap" />
+                    <Button Text="Thêm vào album…" Clicked="AddToAlbumClicked" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                <Button Text="Lưu về máy" Clicked="SaveClicked" />
+                <Button Text="Chia sẻ" Clicked="ShareClicked" />
+            </Grid>
+            <Button Text="Xóa" Style="{StaticResource ButtonDanger}" Clicked="DeleteClicked" />
+
+            <Label x:Name="ChecksumLabel" Style="{StaticResource LabelMuted}" FontSize="11" Margin="0,6,0,0" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

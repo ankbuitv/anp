@@ -95,6 +95,9 @@ Không có các credential trên thì **không tuyên bố đã deploy hoặc mi
 ```
 anp/
 ├── apps/web/              SPA React
+├── mobile-app/            .NET MAUI (Android/iOS) — xem docs/mobile-roadmap.md
+│   ├── AnpMobile.Core/    API client + upload engine (thuần .NET, dùng lại được)
+│   └── Pages/ Services/ ViewModels/ Controls/ Resources/
 ├── packages/
 │   ├── api-types/         Type dùng lại Desktop/Mobile
 │   ├── shared/
@@ -110,6 +113,10 @@ Tài liệu: [docs/architecture.md](docs/architecture.md) · [docs/api.md](docs/
 ## Phase 1 — Web đã có
 
 Đăng ký / đăng nhập / phiên · upload resume 1.000 file · gallery cursor · viewer 2 panel · EXIF/GPS · album kéo-thả · lịch · bản đồ · kỷ niệm / khoảnh khắc · yêu thích · thùng rác · trùng checksum · dọn dẹp · dung lượng · Private Vault + PIN · share + QR + analytics · nhập ZIP an toàn · xuất album · thông báo · nhật ký · thiết bị · ANP Drop foundation · backup foundation · dark/light · phím tắt · API chung cho Phase 2/3.
+
+## Mobile (Phase 3) — đang làm
+
+App .NET MAUI dùng chung `/api/v1`: đăng nhập/đăng ký + phiên SecureStorage, gallery cursor + filter + tìm kiếm, viewer vuốt + pinch-zoom + video, upload resume từ máy (chụp/chọn ảnh, video) + trùng checksum + thumbnail native, album, Private Vault + PIN, dung lượng, lưu về máy + share sheet, theme sáng/tối. CI build APK Android + build iOS/MacCatalyst không ký (`.github/workflows/mobile.yml`). Chi tiết: [docs/mobile-roadmap.md](docs/mobile-roadmap.md).
 
 ## Giấy phép
 

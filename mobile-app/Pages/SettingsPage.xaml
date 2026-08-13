@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="AnpMobile.Pages.SettingsPage"
+             Title="Cài đặt">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+
+            <!-- Tài khoản -->
+            <Border Style="{StaticResource Card}">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                    <Border WidthRequest="56" HeightRequest="56" StrokeShape="RoundRectangle 28"
+                            BackgroundColor="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}"
+                            StrokeThickness="0">
+                        <Label Text="{Binding Initials}" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center" VerticalOptions="Center"
+                               TextColor="{AppThemeBinding Dark={StaticResource Ink}, Light={StaticResource InkLight}}" />
+                    </Border>
+                    <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                        <Label Text="{Binding Name}" FontSize="17" FontAttributes="Bold" />
+                        <Label Text="{Binding Email}" Style="{StaticResource LabelMuted}" />
+                    </VerticalStackLayout>
+                </Grid>
+            </Border>
+
+            <!-- Dung lượng -->
+            <Border Style="{StaticResource Card}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Dung lượng" FontAttributes="Bold" />
+                    <Label Text="{Binding StorageText}" Style="{StaticResource LabelMuted}" />
+                    <Label Text="{Binding BackendText}" Style="{StaticResource LabelMuted}" FontSize="12" LineBreakMode="WordWrap" />
+                    <Button Text="Làm mới" Command="{Binding RefreshStorageCommand}" Style="{StaticResource ButtonLink}" Padding="4" MinimumHeightRequest="0" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Máy chủ -->
+            <Border Style="{StaticResource Card}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Máy chủ API" FontAttributes="Bold" />
+                    <Label Text="Mặc định https://p.ankb.qzz.io. Đổi khi test máy chủ local." Style="{StaticResource LabelMuted}" FontSize="12" />
+                    <Entry Text="{Binding ServerUrl}" Keyboard="Url" />
+                    <Button Text="Lưu" Command="{Binding SaveServerCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Giao diện -->
+            <Border Style="{StaticResource Card}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Giao diện" FontAttributes="Bold" />
+                    <Label Text="{Binding ThemeText}" Style="{StaticResource LabelMuted}" />
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                        <Button x:Name="ThemeSystem" Text="Hệ thống" Clicked="ThemeClicked" Style="{StaticResource ButtonChip}" />
+                        <Button x:Name="ThemeDark" Grid.Column="1" Text="Tối" Clicked="ThemeClicked" Style="{StaticResource ButtonChip}" />
+                        <Button x:Name="ThemeLight" Grid.Column="2" Text="Sáng" Clicked="ThemeClicked" Style="{StaticResource ButtonChip}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <Button Text="Đăng xuất" Style="{StaticResource ButtonDanger}" Command="{Binding LogoutCommand}" />
+
+            <Label Text="{Binding ErrorText}" Style="{StaticResource LabelError}" IsVisible="{Binding HasError}" />
+            <Label Text="{Binding AppVersion}" Style="{StaticResource LabelMuted}" FontSize="12" HorizontalOptions="Center" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

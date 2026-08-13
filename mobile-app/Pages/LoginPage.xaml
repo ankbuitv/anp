@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="AnpMobile.Pages.LoginPage"
+             Shell.NavBarIsVisible="False">
+    <ScrollView>
+        <VerticalStackLayout Padding="32,72,32,32" Spacing="14">
+            <Label Text="ANP" FontSize="60" FontAttributes="Bold" HorizontalOptions="Center"
+                   TextColor="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}" />
+            <Label Text="Ảnh &amp; video của bạn — riêng tư, an toàn, ở mọi thiết bị."
+                   HorizontalTextAlignment="Center"
+                   TextColor="{AppThemeBinding Dark={StaticResource Mute}, Light={StaticResource MuteLight}}"
+                   FontSize="14" />
+            <BoxView HeightRequest="24" />
+
+            <Entry x:Name="EmailEntry" Placeholder="Email" Keyboard="Email" ReturnType="Next" />
+            <Entry x:Name="PasswordEntry" Placeholder="Mật khẩu" IsPassword="True" ReturnType="Done" />
+            <Label x:Name="ErrorLabel" Style="{StaticResource LabelError}" IsVisible="False" />
+            <Button Text="Đăng nhập" Style="{StaticResource ButtonPrimary}" Clicked="LoginClicked" />
+            <Button Text="Tạo tài khoản" Style="{StaticResource ButtonLink}" Clicked="RegisterClicked" />
+
+            <Grid ColumnDefinitions="Auto,*">
+                <ActivityIndicator x:Name="Busy" IsRunning="False" IsVisible="False" WidthRequest="24" HeightRequest="24" />
+                <Label x:Name="ServerLabel" Grid.Column="1" FontSize="11" HorizontalTextAlignment="End"
+                       TextColor="{AppThemeBinding Dark={StaticResource Mute}, Light={StaticResource MuteLight}}" />
+            </Grid>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
