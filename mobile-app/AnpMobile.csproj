@@ -42,6 +42,11 @@
     <ProjectReference Include="AnpMobile.Core\AnpMobile.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Phát video trong viewer (MediaElement chưa có sẵn trong MAUI 9) -->
+    <PackageReference Include="CommunityToolkit.Maui.MediaElement" Version="11.0.0" />
+  </ItemGroup>
+
   <!-- Dùng chung code UIKit (ThumbnailService, MediaLibraryService) cho iOS + MacCatalyst -->
   <ItemGroup Condition="$(TargetFramework.Contains('-maccatalyst'))">
     <Compile Include="Platforms\iOS\ThumbnailService.ios.cs" />

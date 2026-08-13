@@ -29,7 +29,7 @@ App **.NET MAUI** (`mobile-app/`), dùng chung `/api/v1`. UI tiếng Việt, the
 
 ## Build
 
-Cần .NET 9 SDK + MAUI workload (`maui-android` / `maui-ios` / `maui-maccatalyst`). CI: `.github/workflows/mobile.yml` build APK Android và build iOS/MacCatalyst không ký.
+Cần .NET 9 SDK + MAUI workload (`maui-android` / `maui-ios` / `maui-maccatalyst`). Phát video dùng gói `CommunityToolkit.Maui.MediaElement` (11.x — MediaElement chỉ vào MAUI từ .NET 10). CI: `.github/workflows/mobile.yml` build APK Android và build iOS/MacCatalyst không ký.
 
 ```bash
 dotnet workload install maui-android   # hoặc maui-ios trên macOS

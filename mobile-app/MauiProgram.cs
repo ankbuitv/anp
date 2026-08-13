@@ -2,9 +2,10 @@ using AnpMobile.Core;
 using AnpMobile.Pages;
 using AnpMobile.Services;
 using AnpMobile.ViewModels;
+using CommunityToolkit.Maui;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Storage;
 using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Storage;
 
 namespace AnpMobile;
 
@@ -15,6 +16,7 @@ public static class MauiProgram
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
+            .UseMauiCommunityToolkitMediaElement()
             .ConfigureFonts(fonts =>
             {
                 // Dùng font mặc định của hệ thống.

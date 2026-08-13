@@ -305,11 +305,19 @@ public sealed class AnpApi : IDisposable
 
     private async Task<byte[]> GetBytesAsync(string path, CancellationToken ct)
     {
-        using var req = new HttpRequestMessage(
-            HttpMethod.Get,
-            path.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-                ? path
-                : path.TrimStart('/'));
+        string relative;
+        if (path.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            relative = path; // URL tuyệt đối — cookies vẫn được gửi theo domain
+        }
+        else
+        {
+            relative = path.TrimStart('/');
+            const string prefix = "api/v1/";
+            if (relative.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                relative = relative[prefix.Length..];
+        }
+        using var req = new HttpRequestMessage(HttpMethod.Get, relative);
         using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         if (resp.StatusCode == HttpStatusCode.Unauthorized)
             throw new ApiException("unauthorized", "Phiên đăng nhập đã hết hạn.", SessionHttp);

@@ -1,5 +1,6 @@
 using AnpMobile.Core;
 using AnpMobile.Services;
+using CommunityToolkit.Maui.Views;
 using Microsoft.Maui.ApplicationModel;
 
 namespace AnpMobile.Controls;
@@ -197,7 +198,7 @@ public sealed class MediaSlide : ContentView
             }
             MainThread.BeginInvokeOnMainThread(() =>
             {
-                _video.Source = path;
+                _video.Source = MediaSource.FromFile(path);
                 _play.IsVisible = true;
                 _progress.Text = "";
             });
