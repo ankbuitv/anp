@@ -36,7 +36,7 @@ Worker secrets (lưu bằng `npx wrangler secret put`, không ghi vào GitHub/re
 - `B2_KEY_ID` — ID của Application Key con giới hạn bucket `anp-media`
 - `B2_APP_KEY` — secret của key con
 
-Không dùng master application key Backblaze. Key con chỉ cần List/Read/Write/Delete trên bucket này.
+Không dùng master application key Backblaze. Key con cần List/Read/Write/Delete trên bucket này **và** «Allow List All Bucket Names» (`listAllBucketNames`) nếu key bị giới hạn một bucket.
 
 Tài nguyên production trong `wrangler.toml`:
 

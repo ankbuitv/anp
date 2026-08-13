@@ -19,7 +19,7 @@ const HELP = `Chuyển media ANP từ Workers KV sang Backblaze B2.
 Biến môi trường bắt buộc:
   ANP_TOKEN       Giá trị cookie anp_session (gửi dưới dạng Bearer; không ghi vào Git)
   B2_KEY_ID       ID của Application Key con, KHÔNG dùng master key
-  B2_APP_KEY      Application Key con giới hạn trong bucket anp-media
+  B2_APP_KEY      Application Key con giới hạn bucket anp-media (cần listAllBucketNames)
 
 Biến môi trường có mặc định:
   ANP_API_URL     https://p.ankb.qzz.io/api/v1

@@ -67,18 +67,20 @@ storageRoutes.get("/", async (c) => {
       // getB2Storage ném lỗi khi credential sai dạng (vd. master key) — đó chính
       // là nguyên nhân upload hỏng, nên phải hiện ra thay vì làm sập trang.
       const storage = getB2Storage(c.env);
-      const health = await storage.check();
+      const prefix = `u/${user.id}/`;
+      const health = await storage.check(prefix);
       backend.healthy = health.ok;
       backend.message = health.ok ? null : health.message;
       if (health.ok) {
         try {
-          const usage = await storage.usage(`u/${user.id}/`);
+          const usage = await storage.usage(prefix);
           backend.objects = usage.objects;
           backend.bytes = usage.bytes;
           backend.truncated = usage.truncated;
         } catch {
-          // Thiếu quyền ListObjects vẫn không được chặn trang Dung lượng.
-          backend.message = "Không đọc được danh sách object trên B2 (thiếu quyền List).";
+          // S3 ListObjectsV2 có thể 403 khi thiếu listAllBucketNames; Native list
+          // đã được thử trong usage(). Nếu vẫn lỗi thì chỉ thiếu quyền List.
+          backend.message = "Không đọc được danh sách object trên B2 (thiếu quyền List / listAllBucketNames).";
         }
       }
     } catch (error) {

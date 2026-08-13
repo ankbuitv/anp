@@ -23,6 +23,14 @@ function BackendCard({ b }: { b: StorageBackendInfo }) {
         ) : null}
       </div>
       {b.message ? <p className="mt-2 text-xs text-danger">{b.message}</p> : null}
+      {b.provider === "b2" && !b.healthy ? (
+        <p className="mt-2 text-xs text-mute">
+          Tạo Application Key mới trên Backblaze: chọn bucket <span className="font-medium">anp-media</span>, bật
+          «Allow List All Bucket Names», quyền List/Read/Write/Delete. Không dùng master key. Rồi chạy{" "}
+          <code className="text-[11px]">npx wrangler secret put B2_KEY_ID</code> và{" "}
+          <code className="text-[11px]">npx wrangler secret put B2_APP_KEY</code>.
+        </p>
+      ) : null}
       {b.provider === "kv" ? (
         <p className="mt-2 text-xs text-mute">
           Đang dùng Workers KV nên file lớn có thể tải lên lỗi. Đặt B2_KEY_ID và B2_APP_KEY để chuyển sang Backblaze B2.
