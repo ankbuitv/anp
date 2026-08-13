@@ -51,7 +51,6 @@ jobs:
       - name: Restore Android project
         run: >-
           dotnet restore mobile-app/AnpMobile.csproj
-          --framework net9.0-android
           -p:TargetFrameworks=net9.0-android
 
       - name: Publish unsigned APK
