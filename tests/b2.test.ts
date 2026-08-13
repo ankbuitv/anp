@@ -188,6 +188,67 @@ describe("B2 native list fallback", () => {
     if (!health.ok) expect(health.message).toMatch(/other-bucket/);
   });
 
+  it("does not call detached fetch (Cloudflare Workers this binding)", async () => {
+    const original = globalThis.fetch;
+    const urls: string[] = [];
+    const authorizeBody = {
+      accountId: "acc",
+      apiUrl: "https://api.backblazeb2.com",
+      authorizationToken: "tok",
+      allowed: {
+        bucketId: "bid",
+        bucketName: "anp-media",
+        capabilities: ["listFiles", "readFiles", "writeFiles", "deleteFiles"],
+      },
+    };
+    // Workers' fetch throws if invoked with the wrong `this` — same as storing
+    // `const fn = fetch` and calling `fn()`, or `this.fetchFn()` after `fetchFn = fetch`.
+    function workersFetch(this: unknown, input: RequestInfo | URL) {
+      if (this != null && this !== globalThis) {
+        throw new TypeError(
+          "Illegal invocation: function called with incorrect `this` reference. See [https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors] for details.",
+        );
+      }
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("b2_list_file_names")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              files: [{ fileName: "u/user/o/1/original.jpg", contentLength: 40, action: "upload" }],
+              nextFileName: null,
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      return Promise.resolve(new Response(JSON.stringify(authorizeBody), { status: 200 }));
+    }
+    globalThis.fetch = workersFetch as typeof fetch;
+    try {
+      const storage = new B2Storage(
+        { B2_BUCKET: "anp-media", B2_KEY_ID: "004xxxxxxxxxxxxxxxx0000000001", B2_APP_KEY: "secret" },
+        {
+          async send(command: unknown) {
+            if (command instanceof ListObjectsV2Command) {
+              throw Object.assign(new Error("Cannot access bucket"), {
+                name: "AccessDenied",
+                $metadata: { httpStatusCode: 403 },
+              });
+            }
+            return {};
+          },
+        } as never,
+      );
+      expect(await storage.check("u/user/")).toEqual({ ok: true });
+      expect(urls.some((url) => url.includes("b2_authorize_account"))).toBe(true);
+      expect(await storage.usage("u/user/")).toEqual({ objects: 1, bytes: 40, truncated: false });
+      expect(urls.some((url) => url.includes("b2_list_file_names"))).toBe(true);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   it("counts usage via native list when S3 ListObjectsV2 returns 403", async () => {
     const client = {
       async send(command: unknown) {
