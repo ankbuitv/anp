@@ -145,7 +145,7 @@ function rawMessage(error: unknown): string {
 }
 
 export const B2_KEY_PERMISSION_HINT =
-  "Application Key giới hạn bucket cần bật «Allow List All Bucket Names» (listAllBucketNames), quyền List/Read/Write/Delete, và đúng bucket anp-media.";
+  "Application Key giới hạn bucket cần quyền List/Read/Write/Delete trên anp-media. S3 List còn cần «Allow List All Bucket Names» (listAllBucketNames); trang Dung lượng đếm bằng Native API nên chỉ cần listFiles.";
 
 /**
  * Đổi lỗi S3/B2 thành thông báo tiếng Việt nêu rõ nguyên nhân, để người dùng
@@ -155,13 +155,24 @@ export function b2ErrorMessage(error: unknown): string {
   const status = statusOf(error);
   const name = nameOf(error);
   const raw = rawMessage(error);
-  if (name === "InvalidAccessKeyId" || name === "SignatureDoesNotMatch" || name === "unauthorized" || status === 401) {
-    return "Backblaze B2 từ chối khóa truy cập (B2_KEY_ID / B2_APP_KEY sai hoặc đã bị thu hồi).";
+  if (/listFiles/i.test(raw) && (status === 401 || status === 403 || /unauthor/i.test(name))) {
+    return "Application Key thiếu quyền listFiles nên không liệt kê được file trên B2.";
   }
-  if (name === "AccessDenied" || status === 403) {
+  if (
+    name === "InvalidAccessKeyId" ||
+    name === "SignatureDoesNotMatch" ||
+    name === "unauthorized" ||
+    name === "bad_auth_token" ||
+    name === "expired_auth_token" ||
+    status === 401
+  ) {
+    return "Backblaze B2 từ chối khóa truy cập (B2_KEY_ID / B2_APP_KEY sai, hết hạn, hoặc đã bị thu hồi).";
+  }
+  if (name === "AccessDenied" || name === "access_denied" || status === 403) {
     if (/cannot access bucket/i.test(raw)) {
       return `Backblaze từ chối truy cập bucket (thường thiếu listAllBucketNames / listBuckets). ${B2_KEY_PERMISSION_HINT}`;
     }
+    if (raw && !/^access denied$/i.test(raw)) return `Backblaze B2 từ chối truy cập: ${raw}`;
     return B2_KEY_PERMISSION_HINT;
   }
   if (name === "NoSuchBucket") return "Bucket B2 không tồn tại (kiểm tra B2_BUCKET).";
@@ -172,7 +183,7 @@ export function b2ErrorMessage(error: unknown): string {
   if (name === "NoSuchUpload") return "Phiên multipart trên B2 đã hết hạn hoặc bị hủy; hãy tải lại file.";
   if (status === 429 || name === "SlowDown") return "Backblaze B2 đang giới hạn tốc độ; thử lại sau ít phút.";
   if (status && status >= 500) return "Backblaze B2 đang lỗi tạm thời; thử lại sau ít phút.";
-  if (/fetch failed|network|timeout/i.test(raw)) return "Không kết nối được tới Backblaze B2.";
+  if (/fetch failed|network|timeout|illegal invocation/i.test(raw)) return "Không kết nối được tới Backblaze B2.";
   return raw ? `Backblaze B2 báo lỗi: ${raw}` : "Backblaze B2 báo lỗi không xác định.";
 }
 
@@ -183,12 +194,20 @@ export function toB2ApiError(error: unknown, action: string) {
   return Errors.server(message);
 }
 
+type NativeBucketRef = {
+  bucketId?: string;
+  bucketName?: string;
+  id?: string;
+  name?: string | null;
+};
+
 type NativeSession = {
   accountId: string;
   apiUrl: string;
   authorizationToken: string;
   bucketId: string | null;
   bucketName: string | null;
+  bucketNames: string[];
   capabilities: string[];
   namePrefix: string | null;
 };
@@ -199,6 +218,21 @@ type NativeFile = {
   size?: number;
   action?: string;
 };
+
+function bucketRefId(bucket: NativeBucketRef | null | undefined) {
+  return bucket?.bucketId || bucket?.id || null;
+}
+
+function bucketRefName(bucket: NativeBucketRef | null | undefined) {
+  return bucket?.bucketName || bucket?.name || null;
+}
+
+function nativeError(status: number, payload: { code?: string; message?: string } | null, fallback: string) {
+  return Object.assign(new Error(payload?.message || fallback), {
+    name: payload?.code || (status === 401 ? "unauthorized" : status === 403 ? "AccessDenied" : "B2NativeError"),
+    $metadata: { httpStatusCode: status },
+  });
+}
 
 export class B2Storage {
   private readonly bucket: string;
@@ -270,10 +304,10 @@ export class B2Storage {
     if (this.keyId && this.appKey) {
       try {
         const auth = await this.getNativeAuth();
-        if (auth.bucketName && auth.bucketName !== this.bucket) {
+        if (auth.bucketNames.length && !auth.bucketNames.includes(this.bucket)) {
           return {
             ok: false,
-            message: `Application Key chỉ được phép trên bucket «${auth.bucketName}», không phải «${this.bucket}».`,
+            message: `Application Key chỉ được phép trên bucket «${auth.bucketNames.join(", ")}», không phải «${this.bucket}».`,
           };
         }
         if (auth.namePrefix && prefix && !prefix.startsWith(auth.namePrefix) && !auth.namePrefix.startsWith(prefix)) {
@@ -301,16 +335,20 @@ export class B2Storage {
 
   /** Tổng số object và bytes thực tế đang nằm trong bucket B2. */
   async usage(prefix?: string): Promise<{ objects: number; bytes: number; truncated: boolean }> {
-    try {
-      return await this.usageViaS3(prefix);
-    } catch (error) {
-      // Key giới hạn bucket thường thiếu listAllBucketNames → S3 ListObjectsV2 = 403.
-      // Native b2_list_file_names chỉ cần listFiles và vẫn đếm được dung lượng.
-      if (this.keyId && this.appKey && (statusOf(error) === 403 || nameOf(error) === "AccessDenied")) {
-        return this.usageViaNative(prefix);
+    // Native b2_list_file_names chỉ cần listFiles. S3 ListObjectsV2 hay 403/400
+    // dù key đã có listAllBucketNames (SDK checksum, XML, "Cannot access bucket").
+    if (this.keyId && this.appKey) {
+      try {
+        return await this.usageViaNative(prefix);
+      } catch (nativeError) {
+        try {
+          return await this.usageViaS3(prefix);
+        } catch {
+          throw nativeError;
+        }
       }
-      throw error;
     }
+    return this.usageViaS3(prefix);
   }
 
   private async usageViaS3(prefix?: string): Promise<{ objects: number; bytes: number; truncated: boolean }> {
@@ -350,7 +388,8 @@ export class B2Storage {
 
   private async authorizeNative(): Promise<NativeSession> {
     const token = btoa(`${this.keyId}:${this.appKey}`);
-    const response = await this.http("https://api.backblazeb2.com/b2api/v2/b2_authorize_account", {
+    // v4 hiểu cả key cũ lẫn Multi-Bucket key; v2/v3 từ chối key tạo bằng v4.
+    const response = await this.http("https://api.backblazeb2.com/b2api/v4/b2_authorize_account", {
       headers: { Authorization: `Basic ${token}` },
     });
     const payload = (await response.json().catch(() => null)) as {
@@ -364,25 +403,41 @@ export class B2Storage {
         bucketName?: string;
         capabilities?: string[];
         namePrefix?: string | null;
-        buckets?: { bucketId?: string; bucketName?: string }[];
+        buckets?: NativeBucketRef[] | null;
+      };
+      apiInfo?: {
+        storageApi?: {
+          apiUrl?: string;
+          allowed?: {
+            bucketId?: string;
+            bucketName?: string;
+            capabilities?: string[];
+            namePrefix?: string | null;
+            buckets?: NativeBucketRef[] | null;
+          };
+        };
       };
     } | null;
-    if (!response.ok || !payload?.apiUrl || !payload.authorizationToken) {
-      const status = response.status;
-      const name = payload?.code || (status === 401 ? "unauthorized" : status === 403 ? "AccessDenied" : "B2NativeError");
-      throw Object.assign(new Error(payload?.message || `HTTP ${status}`), {
-        name,
-        $metadata: { httpStatusCode: status },
-      });
+    const storageApi = payload?.apiInfo?.storageApi;
+    const apiUrl = payload?.apiUrl || storageApi?.apiUrl;
+    const allowed = payload?.allowed ?? storageApi?.allowed ?? {};
+    if (!response.ok || !apiUrl || !payload?.authorizationToken) {
+      throw nativeError(response.status, payload, `HTTP ${response.status}`);
     }
-    const allowed = payload.allowed ?? {};
-    const scoped = allowed.buckets?.find((bucket) => bucket.bucketName === this.bucket) ?? allowed.buckets?.[0];
+    const refs: NativeBucketRef[] = [];
+    if (allowed.bucketId || allowed.bucketName) {
+      refs.push({ bucketId: allowed.bucketId, bucketName: allowed.bucketName });
+    }
+    for (const bucket of allowed.buckets ?? []) refs.push(bucket);
+    const scoped = refs.find((bucket) => bucketRefName(bucket) === this.bucket) ?? refs[0] ?? null;
+    const bucketNames = [...new Set(refs.map(bucketRefName).filter((name): name is string => !!name))];
     return {
       accountId: payload.accountId || "",
-      apiUrl: payload.apiUrl.replace(/\/$/, ""),
+      apiUrl: apiUrl.replace(/\/$/, ""),
       authorizationToken: payload.authorizationToken,
-      bucketId: allowed.bucketId || scoped?.bucketId || null,
-      bucketName: allowed.bucketName || scoped?.bucketName || null,
+      bucketId: bucketRefId(scoped) || allowed.bucketId || null,
+      bucketName: bucketRefName(scoped) || allowed.bucketName || null,
+      bucketNames,
       capabilities: allowed.capabilities ?? [],
       namePrefix: allowed.namePrefix ?? null,
     };
@@ -390,7 +445,7 @@ export class B2Storage {
 
   private async resolveBucketId(auth: NativeSession): Promise<string> {
     if (auth.bucketId) return auth.bucketId;
-    const response = await this.http(`${auth.apiUrl}/b2api/v2/b2_list_buckets`, {
+    const response = await this.http(`${auth.apiUrl}/b2api/v4/b2_list_buckets`, {
       method: "POST",
       headers: {
         Authorization: auth.authorizationToken,
@@ -399,16 +454,14 @@ export class B2Storage {
       body: JSON.stringify({ accountId: auth.accountId, bucketName: this.bucket }),
     });
     const payload = (await response.json().catch(() => null)) as {
-      buckets?: { bucketId?: string; bucketName?: string }[];
+      buckets?: NativeBucketRef[];
       code?: string;
       message?: string;
     } | null;
-    const bucketId = payload?.buckets?.find((bucket) => bucket.bucketName === this.bucket)?.bucketId;
+    const match = payload?.buckets?.find((bucket) => bucketRefName(bucket) === this.bucket);
+    const bucketId = bucketRefId(match);
     if (!response.ok || !bucketId) {
-      throw Object.assign(new Error(payload?.message || "Không xác định được bucketId B2."), {
-        name: payload?.code || "AccessDenied",
-        $metadata: { httpStatusCode: response.status },
-      });
+      throw nativeError(response.status, payload, "Không xác định được bucketId B2.");
     }
     return bucketId;
   }
@@ -422,7 +475,7 @@ export class B2Storage {
     let pages = 0;
     let more = true;
     while (more && pages < 20) {
-      const response = await this.http(`${auth.apiUrl}/b2api/v2/b2_list_file_names`, {
+      const response = await this.http(`${auth.apiUrl}/b2api/v4/b2_list_file_names`, {
         method: "POST",
         headers: {
           Authorization: auth.authorizationToken,
@@ -442,10 +495,7 @@ export class B2Storage {
         message?: string;
       } | null;
       if (!response.ok) {
-        throw Object.assign(new Error(payload?.message || `HTTP ${response.status}`), {
-          name: payload?.code || "AccessDenied",
-          $metadata: { httpStatusCode: response.status },
-        });
+        throw nativeError(response.status, payload, `HTTP ${response.status}`);
       }
       for (const file of payload?.files ?? []) {
         if (file.action && file.action !== "upload") continue;

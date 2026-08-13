@@ -31,7 +31,7 @@ B2 là nơi ghi chính khi đã cấu hình đủ bốn giá trị trên. KV ch�
 
 ### Kiểm tra nhanh khi upload lỗi
 
-`GET /api/v1/storage` trả thêm khối `backend`: provider đang dùng, tên bucket, trạng thái kết nối, thông báo lỗi thật, cùng số object và bytes đo trực tiếp trên prefix `u/{userId}/` của B2. Trang Dung lượng hiển thị khối này ngay dưới các thẻ thống kê, nên số liệu B2 lệch so với D1 sẽ lộ ra ngay. Health check dùng `b2_authorize_account` (không phụ thuộc S3 List). Nếu S3 `ListObjectsV2` bị 403 vì thiếu `listAllBucketNames`, Worker tự đếm bằng Native `b2_list_file_names`. Nếu key không có `listFiles`, phần dung lượng để trống và báo thiếu quyền List, chứ không làm hỏng trang.
+`GET /api/v1/storage` trả thêm khối `backend`: provider đang dùng, tên bucket, trạng thái kết nối, thông báo lỗi thật, cùng số object và bytes đo trực tiếp trên prefix `u/{userId}/` của B2. Trang Dung lượng hiển thị khối này ngay dưới các thẻ thống kê, nên số liệu B2 lệch so với D1 sẽ lộ ra ngay. Health check dùng Native `b2_authorize_account` v4. Đếm dung lượng ưu tiên Native `b2_list_file_names` (chỉ cần `listFiles`) rồi mới thử S3 `ListObjectsV2`. Nếu cả hai đường đều lỗi, API trả nguyên nhân B2 thật chứ không gán mặc định thành thiếu `listAllBucketNames`.
 
 B2 dùng S3 multipart thật: `CreateMultipartUpload`, `UploadPart`, `CompleteMultipartUpload` và `AbortMultipartUpload`. Chunk 8 MB lớn hơn mức tối thiểu 5 MB của S3 (trừ part cuối). Storage key giữ dạng `u/{userId}/o/{mediaId}/{original,thumb,preview}.*`.
 
