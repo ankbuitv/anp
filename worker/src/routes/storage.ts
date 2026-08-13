@@ -3,7 +3,7 @@ import type { AppContext } from "../env";
 import { ok } from "../lib/http";
 import { requireAuth } from "../middleware/auth";
 import { publicMedia, type MediaRow } from "../lib/media";
-import { getB2Storage, isB2Configured } from "../lib/b2";
+import { b2ErrorMessage, getB2Storage, isB2Configured } from "../lib/b2";
 
 export const storageRoutes = new Hono<AppContext>();
 storageRoutes.use("*", requireAuth);
@@ -77,10 +77,11 @@ storageRoutes.get("/", async (c) => {
           backend.objects = usage.objects;
           backend.bytes = usage.bytes;
           backend.truncated = usage.truncated;
-        } catch {
-          // S3 ListObjectsV2 có thể 403 khi thiếu listAllBucketNames; Native list
-          // đã được thử trong usage(). Nếu vẫn lỗi thì chỉ thiếu quyền List.
-          backend.message = "Không đọc được danh sách object trên B2 (thiếu quyền List / listAllBucketNames).";
+        } catch (error) {
+          // usage() thử Native list (listFiles) rồi mới S3 ListObjectsV2.
+          // Hiện đúng lỗi B2 — đừng gán mọi thất bại thành thiếu listAllBucketNames.
+          console.error("B2 usage failed", error);
+          backend.message = `Không đọc được danh sách object trên B2: ${b2ErrorMessage(error)}`;
         }
       }
     } catch (error) {

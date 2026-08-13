@@ -25,8 +25,9 @@ function BackendCard({ b }: { b: StorageBackendInfo }) {
       {b.message ? <p className="mt-2 text-xs text-danger">{b.message}</p> : null}
       {b.provider === "b2" && !b.healthy ? (
         <p className="mt-2 text-xs text-mute">
-          Tạo Application Key mới trên Backblaze: chọn bucket <span className="font-medium">anp-media</span>, bật
-          «Allow List All Bucket Names», quyền List/Read/Write/Delete. Không dùng master key. Rồi chạy{" "}
+          Kiểm tra secret Worker <code className="text-[11px]">B2_KEY_ID</code> /{" "}
+          <code className="text-[11px]">B2_APP_KEY</code> khớp key con trên Backblaze. Key cần List/Read/Write/Delete
+          trên bucket <span className="font-medium">anp-media</span>. Không dùng master key. Sau khi tạo key mới:{" "}
           <code className="text-[11px]">npx wrangler secret put B2_KEY_ID</code> và{" "}
           <code className="text-[11px]">npx wrangler secret put B2_APP_KEY</code>.
         </p>

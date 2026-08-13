@@ -272,4 +272,176 @@ describe("B2 native list fallback", () => {
     );
     expect(await storage.usage("u/user/")).toEqual({ objects: 2, bytes: 110, truncated: false });
   });
+
+  it("lists usage via native API first so a non-403 S3 ListObjects failure is ignored", async () => {
+    let s3Lists = 0;
+    const client = {
+      async send(command: unknown) {
+        if (command instanceof ListObjectsV2Command) {
+          s3Lists += 1;
+          throw Object.assign(new Error("Unable to unmarshall response payload"), {
+            name: "UnknownError",
+            $metadata: { httpStatusCode: 200 },
+          });
+        }
+        return {};
+      },
+    };
+    const storage = new B2Storage(
+      { B2_BUCKET: "anp-media", B2_KEY_ID: "004xxxxxxxxxxxxxxxx0000000001", B2_APP_KEY: "secret" },
+      client as never,
+      nativeFetch([{ fileName: "u/user/o/1/original.jpg", contentLength: 40, action: "upload" }]) as typeof fetch,
+    );
+    expect(await storage.usage("u/user/")).toEqual({ objects: 1, bytes: 40, truncated: false });
+    expect(s3Lists).toBe(0);
+  });
+
+  it("parses v4 authorize allowed.buckets id/name when listing usage", async () => {
+    const fetchFn = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("b2_authorize_account")) {
+        return new Response(
+          JSON.stringify({
+            accountId: "acc",
+            authorizationToken: "tok",
+            apiInfo: {
+              storageApi: {
+                apiUrl: "https://api005.backblazeb2.com",
+                allowed: {
+                  buckets: [{ id: "bid", name: "anp-media" }],
+                  capabilities: ["listFiles", "readFiles", "writeFiles", "deleteFiles", "listAllBucketNames"],
+                  namePrefix: null,
+                },
+              },
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("b2_list_file_names")) {
+        return new Response(
+          JSON.stringify({
+            files: [{ fileName: "u/user/o/1/original.jpg", contentLength: 25, action: "upload" }],
+            nextFileName: null,
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    };
+    const storage = new B2Storage(
+      { B2_BUCKET: "anp-media", B2_KEY_ID: "004xxxxxxxxxxxxxxxx0000000001", B2_APP_KEY: "secret" },
+      { async send() { return {}; } } as never,
+      fetchFn as typeof fetch,
+    );
+    expect(await storage.check("u/user/")).toEqual({ ok: true });
+    expect(await storage.usage("u/user/")).toEqual({ objects: 1, bytes: 25, truncated: false });
+  });
+
+  it("resolves bucketId via b2_list_buckets when the key is not bucket-scoped", async () => {
+    const urls: string[] = [];
+    const fetchFn = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("b2_authorize_account")) {
+        return new Response(
+          JSON.stringify({
+            accountId: "acc",
+            apiUrl: "https://api.backblazeb2.com",
+            authorizationToken: "tok",
+            allowed: {
+              capabilities: ["listFiles", "listBuckets", "listAllBucketNames", "readFiles", "writeFiles"],
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("b2_list_buckets")) {
+        return new Response(JSON.stringify({ buckets: [{ bucketId: "bid", bucketName: "anp-media" }] }), { status: 200 });
+      }
+      if (url.includes("b2_list_file_names")) {
+        return new Response(
+          JSON.stringify({ files: [{ fileName: "u/user/a.jpg", contentLength: 8, action: "upload" }], nextFileName: null }),
+          { status: 200 },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    };
+    const storage = new B2Storage(
+      { B2_BUCKET: "anp-media", B2_KEY_ID: "004xxxxxxxxxxxxxxxx0000000001", B2_APP_KEY: "secret" },
+      { async send() { throw new Error("S3 should not run"); } } as never,
+      fetchFn as typeof fetch,
+    );
+    expect(await storage.usage("u/user/")).toEqual({ objects: 1, bytes: 8, truncated: false });
+    expect(urls.some((url) => url.includes("b2_list_buckets"))).toBe(true);
+  });
+
+  it("falls back to S3 list when native list fails", async () => {
+    const fetchFn = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("b2_authorize_account")) {
+        return new Response(
+          JSON.stringify({
+            accountId: "acc",
+            apiUrl: "https://api.backblazeb2.com",
+            authorizationToken: "tok",
+            allowed: { bucketId: "bid", bucketName: "anp-media", capabilities: ["listFiles"] },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("b2_list_file_names")) {
+        return new Response(JSON.stringify({ code: "unauthorized", message: "application key has no listFiles capability" }), {
+          status: 401,
+        });
+      }
+      return new Response("not found", { status: 404 });
+    };
+    const client = {
+      async send(command: unknown) {
+        if (command instanceof ListObjectsV2Command) {
+          return { Contents: [{ Key: "u/user/o/1/original.jpg", Size: 12 }], IsTruncated: false };
+        }
+        return {};
+      },
+    };
+    const storage = new B2Storage(
+      { B2_BUCKET: "anp-media", B2_KEY_ID: "004xxxxxxxxxxxxxxxx0000000001", B2_APP_KEY: "secret" },
+      client as never,
+      fetchFn as typeof fetch,
+    );
+    expect(await storage.usage("u/user/")).toEqual({ objects: 1, bytes: 12, truncated: false });
+  });
+
+  it("keeps the native list error when both list paths fail", async () => {
+    const fetchFn = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("b2_authorize_account")) {
+        return new Response(
+          JSON.stringify({
+            accountId: "acc",
+            apiUrl: "https://api.backblazeb2.com",
+            authorizationToken: "tok",
+            allowed: { bucketId: "bid", bucketName: "anp-media", capabilities: ["readFiles"] },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ code: "unauthorized", message: "application key has no listFiles capability" }), {
+        status: 401,
+      });
+    };
+    const storage = new B2Storage(
+      { B2_BUCKET: "anp-media", B2_KEY_ID: "004xxxxxxxxxxxxxxxx0000000001", B2_APP_KEY: "secret" },
+      {
+        async send() {
+          throw Object.assign(new Error("Unable to unmarshall response payload"), { name: "UnknownError" });
+        },
+      } as never,
+      fetchFn as typeof fetch,
+    );
+    const error = await storage.usage("u/user/").catch((caught) => caught);
+    expect(error).toMatchObject({ message: /listFiles/ });
+    expect(b2ErrorMessage(error)).toMatch(/listFiles/);
+  });
 });
