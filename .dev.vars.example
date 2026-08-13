@@ -3,8 +3,8 @@
 # Worker dùng MEDIA Workers KV local làm fallback.
 #
 # KHÔNG commit .dev.vars. KHÔNG dùng hoặc chia sẻ master application key.
-# Trên Backblaze, hãy tạo Application Key con chỉ có List/Read/Write/Delete
-# và giới hạn duy nhất bucket anp-media.
+# Trên Backblaze, tạo Application Key con giới hạn bucket anp-media,
+# bật «Allow List All Bucket Names», quyền List/Read/Write/Delete.
 
 APP_URL=http://localhost:5173
 ENVIRONMENT=development

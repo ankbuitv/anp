@@ -12,7 +12,7 @@
 - Giới hạn 5 GB / file, 1000 file / lượt, chunk 8 MB
 - Object key: `u/{userId}/o/{mediaId}/…` — không dùng tên file người dùng
 - Bucket B2 là private; download luôn qua Worker sau auth/share check và hỗ trợ Range
-- B2 dùng Application Key con giới hạn bucket với List/Read/Write/Delete; không dùng master key
+- B2 dùng Application Key con giới hạn bucket với List/Read/Write/Delete và `listAllBucketNames`; không dùng master key
 - `B2_KEY_ID`, `B2_APP_KEY`, session token và vault token không commit/không gửi qua chat
 - Workers KV fallback chỉ truy cập qua binding
 - Share token ngẫu nhiên, thu hồi, hết hạn, quyền view|download

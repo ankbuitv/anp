@@ -14,7 +14,7 @@ D1 chỉ giữ metadata và không thay đổi khi chuyển storage. Media produ
 
 ## Cấu hình B2
 
-Tạo **Application Key con** trên Backblaze, giới hạn duy nhất bucket `anp-media` và chỉ cấp List/Read/Write/Delete. Không dùng hoặc chia sẻ master application key. Lưu hai giá trị bằng Wrangler secrets, không đặt trong `wrangler.toml`:
+Tạo **Application Key con** trên Backblaze, giới hạn duy nhất bucket `anp-media`, bật **Allow List All Bucket Names** (`listAllBucketNames` — bắt buộc để S3 SDK liệt kê bucket bị giới hạn), và cấp List/Read/Write/Delete. Không dùng hoặc chia sẻ master application key. Lưu hai giá trị bằng Wrangler secrets, không đặt trong `wrangler.toml`:
 
 ```bash
 npx wrangler secret put B2_KEY_ID
@@ -31,7 +31,7 @@ B2 là nơi ghi chính khi đã cấu hình đủ bốn giá trị trên. KV ch�
 
 ### Kiểm tra nhanh khi upload lỗi
 
-`GET /api/v1/storage` trả thêm khối `backend`: provider đang dùng, tên bucket, trạng thái kết nối, thông báo lỗi thật, cùng số object và bytes đo trực tiếp trên prefix `u/{userId}/` của B2. Trang Dung lượng hiển thị khối này ngay dưới các thẻ thống kê, nên số liệu B2 lệch so với D1 sẽ lộ ra ngay. Nếu cần quyền `listFiles` mà key không có, phần dung lượng để trống và báo thiếu quyền List, chứ không làm hỏng trang.
+`GET /api/v1/storage` trả thêm khối `backend`: provider đang dùng, tên bucket, trạng thái kết nối, thông báo lỗi thật, cùng số object và bytes đo trực tiếp trên prefix `u/{userId}/` của B2. Trang Dung lượng hiển thị khối này ngay dưới các thẻ thống kê, nên số liệu B2 lệch so với D1 sẽ lộ ra ngay. Health check dùng `b2_authorize_account` (không phụ thuộc S3 List). Nếu S3 `ListObjectsV2` bị 403 vì thiếu `listAllBucketNames`, Worker tự đếm bằng Native `b2_list_file_names`. Nếu key không có `listFiles`, phần dung lượng để trống và báo thiếu quyền List, chứ không làm hỏng trang.
 
 B2 dùng S3 multipart thật: `CreateMultipartUpload`, `UploadPart`, `CompleteMultipartUpload` và `AbortMultipartUpload`. Chunk 8 MB lớn hơn mức tối thiểu 5 MB của S3 (trừ part cuối). Storage key giữ dạng `u/{userId}/o/{mediaId}/{original,thumb,preview}.*`.
 

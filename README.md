@@ -52,7 +52,7 @@ npm run build
 
 ### Cấu hình B2 an toàn
 
-Trong Backblaze **App Keys → Add a New Application Key**, tạo key con chỉ cho bucket `anp-media`, với quyền **List/Read/Write/Delete**. Không dùng, không gửi qua chat, và không ghi master application key vào repo. Secret chỉ hiện một lần; lưu bằng secret manager rồi cấu hình Worker:
+Trong Backblaze **App Keys → Add a New Application Key**, tạo key con chỉ cho bucket `anp-media`, bật **Allow List All Bucket Names** (bắt buộc với S3 API khi key bị giới hạn một bucket), và quyền **List/Read/Write/Delete**. Không dùng, không gửi qua chat, và không ghi master application key vào repo. Secret chỉ hiện một lần; lưu bằng secret manager rồi cấu hình Worker:
 
 ```bash
 npx wrangler secret put B2_KEY_ID

@@ -6,10 +6,11 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
-import { B2Storage } from "../worker/src/lib/b2";
+import { B2Storage, b2ErrorMessage } from "../worker/src/lib/b2";
 
 function fakeStorage(respond: (command: unknown) => unknown) {
   const commands: unknown[] = [];
@@ -111,5 +112,103 @@ describe("Backblaze B2 S3 storage", () => {
     expect(response.headers.get("Content-Range")).toBe("bytes 3-7/10");
     expect(response.headers.get("ETag")).toBe('"object-etag"');
     expect(await response.text()).toBe("lowor");
+  });
+});
+
+describe("b2ErrorMessage", () => {
+  it("tells operators to enable listAllBucketNames on a bucket-scoped key", () => {
+    const denied = Object.assign(new Error("Access Denied"), {
+      name: "AccessDenied",
+      $metadata: { httpStatusCode: 403 },
+    });
+    expect(b2ErrorMessage(denied)).toMatch(/Allow List All Bucket Names/);
+    expect(b2ErrorMessage(denied)).toMatch(/listAllBucketNames/);
+
+    const cannotAccess = Object.assign(new Error("Cannot access bucket"), {
+      name: "AccessDenied",
+      $metadata: { httpStatusCode: 403 },
+    });
+    expect(b2ErrorMessage(cannotAccess)).toMatch(/listAllBucketNames/);
+  });
+});
+
+describe("B2 native list fallback", () => {
+  function nativeFetch(files: { fileName: string; contentLength: number; action?: string }[], bucketName = "anp-media") {
+    return async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("b2_authorize_account")) {
+        return new Response(
+          JSON.stringify({
+            accountId: "acc",
+            apiUrl: "https://api.backblazeb2.com",
+            authorizationToken: "tok",
+            allowed: {
+              bucketId: "bid",
+              bucketName,
+              capabilities: ["listFiles", "readFiles", "writeFiles", "deleteFiles"],
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("b2_list_file_names")) {
+        return new Response(JSON.stringify({ files, nextFileName: null }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    };
+  }
+
+  it("treats a valid native authorize as healthy even when S3 ListObjects is denied", async () => {
+    const client = {
+      async send() {
+        throw Object.assign(new Error("Access Denied"), { name: "AccessDenied", $metadata: { httpStatusCode: 403 } });
+      },
+    };
+    const storage = new B2Storage(
+      { B2_BUCKET: "anp-media", B2_KEY_ID: "004xxxxxxxxxxxxxxxx0000000001", B2_APP_KEY: "secret" },
+      client as never,
+      nativeFetch([]) as typeof fetch,
+    );
+    expect(await storage.check("u/user/")).toEqual({ ok: true });
+  });
+
+  it("rejects a key that is scoped to a different bucket", async () => {
+    const client = {
+      async send() {
+        return {};
+      },
+    };
+    const storage = new B2Storage(
+      { B2_BUCKET: "anp-media", B2_KEY_ID: "004xxxxxxxxxxxxxxxx0000000001", B2_APP_KEY: "secret" },
+      client as never,
+      nativeFetch([], "other-bucket") as typeof fetch,
+    );
+    const health = await storage.check();
+    expect(health.ok).toBe(false);
+    if (!health.ok) expect(health.message).toMatch(/other-bucket/);
+  });
+
+  it("counts usage via native list when S3 ListObjectsV2 returns 403", async () => {
+    const client = {
+      async send(command: unknown) {
+        if (command instanceof ListObjectsV2Command) {
+          throw Object.assign(new Error("Cannot access bucket"), {
+            name: "AccessDenied",
+            $metadata: { httpStatusCode: 403 },
+          });
+        }
+        return {};
+      },
+    };
+    const storage = new B2Storage(
+      { B2_BUCKET: "anp-media", B2_KEY_ID: "004xxxxxxxxxxxxxxxx0000000001", B2_APP_KEY: "secret" },
+      client as never,
+      nativeFetch([
+        { fileName: "u/user/o/1/original.jpg", contentLength: 100, action: "upload" },
+        { fileName: "u/user/o/1/thumb.jpg", contentLength: 10, action: "upload" },
+        { fileName: "u/user/o/1/", contentLength: 0, action: "folder" },
+      ]) as typeof fetch,
+    );
+    expect(await storage.usage("u/user/")).toEqual({ objects: 2, bytes: 110, truncated: false });
   });
 });
