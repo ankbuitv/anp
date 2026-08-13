@@ -13,6 +13,7 @@ import {
   UploadPartCommand,
   type CompletedPart,
 } from "@aws-sdk/client-s3";
+import { FetchHttpHandler } from "@smithy/fetch-http-handler";
 import type { Env } from "../env";
 import { ApiError, Errors } from "./errors";
 import { parseRange, type MpPart, type StorageBody } from "./kv";
@@ -38,6 +39,17 @@ function regionFromEndpoint(endpoint: string): string {
   return "us-east-005";
 }
 
+/**
+ * Cloudflare Workers' `fetch` is a method of the global object. Capturing it
+ * (`const fn = fetch; fn()`) or calling it as `this.fetchFn()` after
+ * `fetchFn = fetch` throws:
+ *   TypeError: Illegal invocation: function called with incorrect `this` reference
+ * Always call the global as a free function, or wrap it like this.
+ */
+function defaultFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return fetch(input, init);
+}
+
 function createClient(env: B2Env) {
   const keyId = env.B2_KEY_ID.trim();
   const appKey = env.B2_APP_KEY.trim();
@@ -57,6 +69,9 @@ function createClient(env: B2Env) {
     // Backblaze B2 does not require the newer automatic S3 checksum headers.
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
+    // NodeHttpHandler extracts `https.request` and calls it without `this`.
+    // On Workers that throws Illegal invocation; FetchHttpHandler uses global fetch.
+    requestHandler: new FetchHttpHandler(),
   });
 }
 
@@ -194,11 +209,18 @@ export class B2Storage {
   constructor(
     env: Pick<B2Env, "B2_BUCKET"> & Partial<Pick<B2Env, "B2_KEY_ID" | "B2_APP_KEY">>,
     private readonly client: S3Sender,
-    private readonly fetchFn: typeof fetch = fetch,
+    private readonly fetchFn: typeof fetch = defaultFetch,
   ) {
     this.bucket = env.B2_BUCKET.trim();
     this.keyId = env.B2_KEY_ID?.trim();
     this.appKey = env.B2_APP_KEY?.trim();
+  }
+
+  /** Native B2 HTTP — never call the Workers `fetch` binding with the wrong `this`. */
+  private http(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const fn = this.fetchFn;
+    if (fn === fetch || fn === defaultFetch) return fetch(input, init);
+    return fn(input, init);
   }
 
   async putObject(key: string, body: StorageBody, contentType: string) {
@@ -328,7 +350,7 @@ export class B2Storage {
 
   private async authorizeNative(): Promise<NativeSession> {
     const token = btoa(`${this.keyId}:${this.appKey}`);
-    const response = await this.fetchFn("https://api.backblazeb2.com/b2api/v2/b2_authorize_account", {
+    const response = await this.http("https://api.backblazeb2.com/b2api/v2/b2_authorize_account", {
       headers: { Authorization: `Basic ${token}` },
     });
     const payload = (await response.json().catch(() => null)) as {
@@ -368,7 +390,7 @@ export class B2Storage {
 
   private async resolveBucketId(auth: NativeSession): Promise<string> {
     if (auth.bucketId) return auth.bucketId;
-    const response = await this.fetchFn(`${auth.apiUrl}/b2api/v2/b2_list_buckets`, {
+    const response = await this.http(`${auth.apiUrl}/b2api/v2/b2_list_buckets`, {
       method: "POST",
       headers: {
         Authorization: auth.authorizationToken,
@@ -400,7 +422,7 @@ export class B2Storage {
     let pages = 0;
     let more = true;
     while (more && pages < 20) {
-      const response = await this.fetchFn(`${auth.apiUrl}/b2api/v2/b2_list_file_names`, {
+      const response = await this.http(`${auth.apiUrl}/b2api/v2/b2_list_file_names`, {
         method: "POST",
         headers: {
           Authorization: auth.authorizationToken,
