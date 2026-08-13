@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="AnpMobile.Pages.SplashPage"
+             Shell.NavBarIsVisible="False">
+    <Grid>
+        <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" Spacing="18">
+            <Label Text="ANP" FontSize="64" FontAttributes="Bold" HorizontalOptions="Center"
+                   TextColor="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}" />
+            <ActivityIndicator IsRunning="True" WidthRequest="30" HeightRequest="30" HorizontalOptions="Center" />
+            <Label Text="Đang khôi phục phiên…" FontSize="13"
+                   TextColor="{AppThemeBinding Dark={StaticResource Mute}, Light={StaticResource MuteLight}}" />
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>

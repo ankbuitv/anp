@@ -154,7 +154,11 @@ authRoutes.post("/register", rateLimit(8, 10 * 60_000, "reg"), async (c) => {
       console.error("user_settings insert failed", err);
     }
   }
-  await createSession(c, id, { name: "Trình duyệt", type: "web", platform: c.req.header("user-agent") || "" });
+  await createSession(c, id, {
+    name: body.deviceName || "Trình duyệt",
+    type: body.deviceType || "web",
+    platform: body.platform || c.req.header("user-agent") || "",
+  });
   let emailQueued = false;
   if (!emailVerified) {
     try {

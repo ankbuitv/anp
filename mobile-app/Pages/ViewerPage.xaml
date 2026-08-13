@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:views="clr-namespace:AnpMobile.Controls"
+             xmlns:models="clr-namespace:AnpMobile.Core;assembly=AnpMobile.Core"
+             x:Class="AnpMobile.Pages.ViewerPage"
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="Black">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <CarouselView Grid.RowSpan="3" x:Name="Carousel"
+                      ItemsSource="{Binding MediaItems}"
+                      Loop="False"
+                      CurrentItemChanged="CarouselCurrentItemChanged">
+            <CarouselView.ItemTemplate>
+                <DataTemplate x:DataType="models:Media">
+                    <views:MediaSlide Media="{Binding .}" />
+                </DataTemplate>
+            </CarouselView.ItemTemplate>
+        </CarouselView>
+
+        <!-- Thanh trên -->
+        <Grid Grid.Row="0" BackgroundColor="#99000000" Padding="6,4" ColumnDefinitions="Auto,*,Auto">
+            <Button Text="✕" Clicked="CloseClicked" Style="{StaticResource ButtonOverlay}" />
+            <Label Grid.Column="1" x:Name="TitleLabel" TextColor="White" FontSize="14"
+                   LineBreakMode="TailTruncation" VerticalOptions="Center" Margin="8,0" />
+            <Label Grid.Column="2" x:Name="CountLabel" TextColor="#C8C8C8" FontSize="13" VerticalOptions="Center" />
+        </Grid>
+
+        <!-- Thanh dưới -->
+        <Grid Grid.Row="2" BackgroundColor="#99000000" Padding="6,6" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+            <Label Grid.Column="0" x:Name="PrivateBadge" Text="🔒 Private" TextColor="#D7A36A" FontSize="13"
+                   VerticalOptions="Center" IsVisible="False" />
+            <Button Grid.Column="1" Text="Thông tin" Clicked="InfoClicked" Style="{StaticResource ButtonOverlay}" />
+            <Button Grid.Column="2" x:Name="FavButton" Text="☆" Clicked="FavClicked" Style="{StaticResource ButtonOverlay}" />
+            <Button Grid.Column="3" x:Name="PrivateButton" Text="Kho" Clicked="PrivateClicked" Style="{StaticResource ButtonOverlay}" />
+            <Button Grid.Column="4" Text="Lưu" Clicked="SaveClicked" Style="{StaticResource ButtonOverlay}" />
+            <Button Grid.Column="5" Text="Xóa" Clicked="DeleteClicked" Style="{StaticResource ButtonOverlay}" />
+        </Grid>
+
+        <!-- Overlay tải/lưu -->
+        <Grid Grid.RowSpan="3" x:Name="BusyOverlay" BackgroundColor="#66000000" IsVisible="False">
+            <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" Spacing="12" Padding="24">
+                <ActivityIndicator x:Name="BusySpinner" IsRunning="False" />
+                <Label x:Name="BusyLabel" TextColor="White" FontSize="14" HorizontalTextAlignment="Center" />
+            </VerticalStackLayout>
+        </Grid>
+
+    </Grid>
+</ContentPage>

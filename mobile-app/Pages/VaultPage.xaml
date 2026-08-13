@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="AnpMobile.Pages.VaultPage"
+             Title="Vault">
+    <ScrollView>
+        <VerticalStackLayout Padding="24" Spacing="14">
+
+            <Label Text="Private Vault" Style="{StaticResource LabelTitle}" />
+            <Label Text="Kho riêng tư của bạn. Ảnh/video trong Vault chỉ hiển thị khi mở khóa bằng PIN 6 chữ số."
+                   Style="{StaticResource LabelMuted}" LineBreakMode="WordWrap" />
+
+            <!-- Chưa có PIN -->
+            <VerticalStackLayout Spacing="10" IsVisible="{Binding ShowSetPin}">
+                <Border Style="{StaticResource Card}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Đặt PIN cho Vault" FontAttributes="Bold" />
+                        <Entry x:Name="PinEntry" Text="{Binding Pin}" Placeholder="PIN 6 chữ số" Keyboard="Numeric" IsPassword="True" MaxLength="6" />
+                        <Entry x:Name="ConfirmEntry" Text="{Binding ConfirmPin}" Placeholder="Nhập lại PIN" Keyboard="Numeric" IsPassword="True" MaxLength="6" />
+                        <Button Text="Đặt PIN" Style="{StaticResource ButtonPrimary}" Command="{Binding SetPinCommand}" />
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+
+            <!-- Đang khóa -->
+            <VerticalStackLayout Spacing="10" IsVisible="{Binding ShowUnlock}">
+                <Border Style="{StaticResource Card}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Mở khóa Vault" FontAttributes="Bold" />
+                        <Entry x:Name="UnlockEntry" Text="{Binding Pin}" Placeholder="PIN" Keyboard="Numeric" IsPassword="True" MaxLength="6" />
+                        <Button Text="Mở khóa" Style="{StaticResource ButtonPrimary}" Command="{Binding UnlockCommand}" />
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+
+            <!-- Đã mở khóa -->
+            <VerticalStackLayout Spacing="10" IsVisible="{Binding ShowUnlocked}">
+                <Border Style="{StaticResource Card}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Vault đang mở khóa ✓" TextColor="{AppThemeBinding Dark={StaticResource Ok}, Light={StaticResource OkLight}}"
+                               FontAttributes="Bold" />
+                        <Label Text="Sẽ tự khóa lại theo phiên. Khóa ngay khi không dùng."
+                               Style="{StaticResource LabelMuted}" />
+                        <Button Text="Xem Private Vault" Style="{StaticResource ButtonPrimary}" Clicked="OpenVaultClicked" />
+                        <Button Text="Khóa ngay" Command="{Binding LockCommand}" />
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+
+            <Label Text="{Binding Message}" Style="{StaticResource LabelError}" IsVisible="{Binding HasMessage}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

@@ -16,6 +16,9 @@ export const registerSchema = z
     email: emailSchema,
     password: passwordSchema,
     confirmPassword: z.string(),
+    deviceName: z.string().max(80).optional(),
+    deviceType: z.enum(["web", "desktop", "ios", "android"]).optional(),
+    platform: z.string().max(80).optional(),
   })
   .refine((v) => v.password === v.confirmPassword, {
     message: "Xác nhận mật khẩu không khớp.",

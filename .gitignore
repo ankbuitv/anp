@@ -57,6 +57,14 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
+# .NET / MAUI
+bin/
+obj/
+*.user
+.vs/
+*.suo
+!mobile-app/**/*.png
+
 # test artifacts
 tmp
 temp

@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- Pages -->
+    <Style TargetType="Page" ApplyToDerivedTypes="True">
+        <Setter Property="BackgroundColor" Value="{AppThemeBinding Dark={StaticResource Ink}, Light={StaticResource InkLight}}" />
+    </Style>
+
+    <!-- Labels -->
+    <Style TargetType="Label">
+        <Setter Property="TextColor" Value="{AppThemeBinding Dark={StaticResource Paper}, Light={StaticResource PaperLight}}" />
+        <Setter Property="FontSize" Value="15" />
+    </Style>
+
+    <Style x:Key="LabelMuted" TargetType="Label">
+        <Setter Property="TextColor" Value="{AppThemeBinding Dark={StaticResource Mute}, Light={StaticResource MuteLight}}" />
+        <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <Style x:Key="LabelError" TargetType="Label">
+        <Setter Property="TextColor" Value="{AppThemeBinding Dark={StaticResource Danger}, Light={StaticResource DangerLight}}" />
+        <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <Style x:Key="LabelTitle" TargetType="Label">
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="FontAttributes" Value="Bold" />
+    </Style>
+
+    <!-- Buttons -->
+    <Style TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{AppThemeBinding Dark={StaticResource Elev2}, Light={StaticResource Elev2Light}}" />
+        <Setter Property="TextColor" Value="{AppThemeBinding Dark={StaticResource Paper}, Light={StaticResource PaperLight}}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="16,10" />
+        <Setter Property="MinimumHeightRequest" Value="46" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="Opacity" Value="0.45" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ButtonPrimary" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}" />
+        <Setter Property="TextColor" Value="{AppThemeBinding Dark={StaticResource Ink}, Light={StaticResource InkLight}}" />
+        <Setter Property="FontAttributes" Value="Bold" />
+    </Style>
+
+    <Style x:Key="ButtonLink" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="TextColor" Value="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}" />
+        <Setter Property="FontSize" Value="14" />
+    </Style>
+
+    <Style x:Key="ButtonDanger" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{AppThemeBinding Dark=#2A1512, Light=#F3DCD7}" />
+        <Setter Property="TextColor" Value="{AppThemeBinding Dark={StaticResource Danger}, Light={StaticResource DangerLight}}" />
+    </Style>
+
+    <Style x:Key="ButtonChip" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{AppThemeBinding Dark={StaticResource Elev2}, Light={StaticResource Elev2Light}}" />
+        <Setter Property="TextColor" Value="{AppThemeBinding Dark={StaticResource Paper}, Light={StaticResource PaperLight}}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="14,6" />
+        <Setter Property="MinimumHeightRequest" Value="34" />
+    </Style>
+
+    <Style x:Key="ButtonChipSelected" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}" />
+        <Setter Property="TextColor" Value="{AppThemeBinding Dark={StaticResource Ink}, Light={StaticResource InkLight}}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="14,6" />
+        <Setter Property="MinimumHeightRequest" Value="34" />
+    </Style>
+
+    <Style x:Key="ButtonOverlay" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="#33000000" />
+        <Setter Property="TextColor" Value="White" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="MinimumHeightRequest" Value="36" />
+    </Style>
+
+    <!-- Entries -->
+    <Style TargetType="Entry">
+        <Setter Property="BackgroundColor" Value="{AppThemeBinding Dark={StaticResource Elev2}, Light={StaticResource Elev2Light}}" />
+        <Setter Property="TextColor" Value="{AppThemeBinding Dark={StaticResource Paper}, Light={StaticResource PaperLight}}" />
+        <Setter Property="PlaceholderColor" Value="{AppThemeBinding Dark={StaticResource Mute}, Light={StaticResource MuteLight}}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="MinimumHeightRequest" Value="46" />
+    </Style>
+
+    <!-- SearchBar -->
+    <Style TargetType="SearchBar">
+        <Setter Property="BackgroundColor" Value="{AppThemeBinding Dark={StaticResource Elev}, Light={StaticResource ElevLight}}" />
+        <Setter Property="TextColor" Value="{AppThemeBinding Dark={StaticResource Paper}, Light={StaticResource PaperLight}}" />
+        <Setter Property="PlaceholderColor" Value="{AppThemeBinding Dark={StaticResource Mute}, Light={StaticResource MuteLight}}" />
+        <Setter Property="CancelButtonColor" Value="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}" />
+        <Setter Property="FontSize" Value="15" />
+    </Style>
+
+    <!-- Cards -->
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{AppThemeBinding Dark={StaticResource Elev2}, Light={StaticResource Elev2Light}}" />
+        <Setter Property="Stroke" Value="{AppThemeBinding Dark=#FFFFFF12, Light=#1C191410}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 12" />
+        <Setter Property="Padding" Value="14,12" />
+    </Style>
+
+    <!-- Switch -->
+    <Style TargetType="Switch">
+        <Setter Property="OnColor" Value="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}" />
+        <Setter Property="ThumbColor" Value="{AppThemeBinding Dark={StaticResource Paper}, Light={StaticResource PaperLight}}" />
+    </Style>
+
+    <!-- ActivityIndicator -->
+    <Style TargetType="ActivityIndicator">
+        <Setter Property="Color" Value="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}" />
+    </Style>
+
+    <!-- ProgressBar -->
+    <Style TargetType="ProgressBar">
+        <Setter Property="ProgressColor" Value="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}" />
+    </Style>
+
+    <!-- RefreshView -->
+    <Style TargetType="RefreshView">
+        <Setter Property="RefreshColor" Value="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}" />
+    </Style>
+
+</ResourceDictionary>

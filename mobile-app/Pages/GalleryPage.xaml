@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:AnpMobile.ViewModels"
+             x:Class="AnpMobile.Pages.GalleryPage"
+             x:Name="Page"
+             Title="{Binding Title}">
+
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Tìm" Clicked="ToggleSearchClicked" />
+        <ToolbarItem Text="Tải lên" Clicked="UploadClicked" />
+        <ToolbarItem Text="Chọn" Clicked="SelectClicked" />
+    </ContentPage.ToolbarItems>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <SearchBar x:Name="Search" Grid.Row="0" IsVisible="False" Margin="10,4"
+                   Placeholder="Tìm ảnh, video…"
+                   Text="{Binding SearchText}"
+                   SearchCommand="{Binding SearchCommand}" />
+
+        <ScrollView Grid.Row="1" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+            <HorizontalStackLayout Padding="10,6" Spacing="8">
+                <Button x:Name="ChipAll" Text="Tất cả" Style="{StaticResource ButtonChip}" Clicked="ChipClicked" />
+                <Button x:Name="ChipImage" Text="Ảnh" Style="{StaticResource ButtonChip}" Clicked="ChipClicked" />
+                <Button x:Name="ChipVideo" Text="Video" Style="{StaticResource ButtonChip}" Clicked="ChipClicked" />
+                <Button x:Name="ChipFavorite" Text="Yêu thích" Style="{StaticResource ButtonChip}" Clicked="ChipClicked" />
+            </HorizontalStackLayout>
+        </ScrollView>
+
+        <RefreshView Grid.Row="2" Command="{Binding RefreshCommand}">
+            <CollectionView x:Name="MediaGrid"
+                            ItemsSource="{Binding Items}"
+                            SelectionMode="None"
+                            RemainingItemsThreshold="12"
+                            RemainingItemsThresholdReached="ThresholdReached">
+                <CollectionView.ItemsLayout>
+                    <GridItemsLayout Orientation="Vertical" Span="3" HorizontalItemSpacing="2" VerticalItemSpacing="2" />
+                </CollectionView.ItemsLayout>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:MediaTileViewModel">
+                        <Grid Padding="1"
+                              BackgroundColor="{AppThemeBinding Dark={StaticResource Elev}, Light={StaticResource ElevLight}}">
+                            <Image Source="{Binding ThumbPath}" Aspect="AspectFill" />
+                            <Label Text="🎞" FontSize="26" HorizontalOptions="Center" VerticalOptions="Center"
+                                   IsVisible="{Binding ShowPlaceholder}" />
+                            <Label Text="▶" FontSize="26" TextColor="White" HorizontalOptions="Center" VerticalOptions="Center"
+                                   IsVisible="{Binding IsVideo}" />
+                            <Label Text="★" TextColor="{AppThemeBinding Dark={StaticResource Bronze}, Light={StaticResource BronzeLight}}"
+                                   FontSize="16" HorizontalOptions="End" VerticalOptions="Start" Margin="0,2,6,0"
+                                   IsVisible="{Binding IsFavorite}" />
+                            <Label Text="{Binding DurationText}" TextColor="White" FontSize="11"
+                                   HorizontalOptions="End" VerticalOptions="End" Margin="0,0,6,4"
+                                   IsVisible="{Binding IsVideo}" />
+                            <Grid BackgroundColor="#99000000" IsVisible="{Binding Selected}">
+                                <Border WidthRequest="28" HeightRequest="28" Stroke="White" StrokeThickness="2"
+                                        HorizontalOptions="Center" VerticalOptions="Center">
+                                    <Label Text="✓" TextColor="White" FontSize="16" HorizontalOptions="Center" VerticalOptions="Center" />
+                                </Border>
+                            </Grid>
+                            <Grid.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="TileTapped" />
+                            </Grid.GestureRecognizers>
+                        </Grid>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <Grid Grid.Row="2" IsVisible="{Binding IsEmpty}" Padding="32">
+            <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" Spacing="10">
+                <Label Text="Chưa có ảnh nào" FontSize="18" HorizontalOptions="Center"
+                       TextColor="{AppThemeBinding Dark={StaticResource Mute}, Light={StaticResource MuteLight}}" />
+                <Label Text="Bấm nút Tải lên để thêm ảnh/video từ máy." Style="{StaticResource LabelMuted}"
+                       HorizontalTextAlignment="Center" />
+                <Label Text="{Binding ErrorText}" Style="{StaticResource LabelError}" IsVisible="{Binding HasError}"
+                       HorizontalTextAlignment="Center" Margin="0,8,0,0" />
+            </VerticalStackLayout>
+        </Grid>
+
+        <Border Grid.Row="3" IsVisible="{Binding SelectMode}" Padding="12,8" Margin="8,0,8,10"
+                Style="{StaticResource Card}">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="10">
+                <Label Text="{Binding SelectedCount, StringFormat='{0} đã chọn'}" VerticalOptions="Center" />
+                <Button Grid.Column="2" Text="★" Command="{Binding BatchFavoriteCommand}" />
+                <Button Grid.Column="3" Text="Riêng tư" Command="{Binding BatchPrivateCommand}" />
+                <Button Grid.Column="4" Text="Xóa" Command="{Binding BatchDeleteCommand}" Style="{StaticResource ButtonDanger}" />
+            </Grid>
+        </Border>
+
+    </Grid>
+</ContentPage>
