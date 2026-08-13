@@ -1,0 +1,56 @@
+name: Mobile Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "mobile-app/**"
+      - ".github/workflows/mobile.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Install .NET MAUI Android workload
+        run: dotnet workload install maui-android
+
+      - name: Restore
+        run: dotnet restore mobile-app/AnpMobile.csproj
+
+      - name: Build unsigned APK
+        run: >-
+          dotnet publish mobile-app/AnpMobile.csproj
+          --configuration Release
+          --framework net9.0-android
+          --no-restore
+          -p:AndroidPackageFormat=apk
+          -p:AndroidKeyStore=false
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anp-android-apk
+          path: mobile-app/bin/Release/net9.0-android/**/*.apk
+          if-no-files-found: error
+          retention-days: 14
